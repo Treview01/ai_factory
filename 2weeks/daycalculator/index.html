@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D-Day 카운터</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          keyframes: {
+            fadeUp: {
+              from: { opacity: '0', transform: 'translateY(24px)' },
+              to: { opacity: '1', transform: 'translateY(0)' },
+            },
+            fadeIn: {
+              from: { opacity: '0' },
+              to: { opacity: '1' },
+            },
+            slideDown: {
+              from: { opacity: '0', transform: 'translateY(-8px)' },
+              to: { opacity: '1', transform: 'translateY(0)' },
+            },
+            flip: {
+              '0%': { opacity: '0', transform: 'rotateX(90deg) scale(0.9)' },
+              '100%': { opacity: '1', transform: 'rotateX(0deg) scale(1)' },
+            },
+            blink: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0.3' },
+            },
+            shimmer: {
+              '0%': { backgroundPosition: '-200% 0' },
+              '100%': { backgroundPosition: '200% 0' },
+            },
+            popIn: {
+              '0%': { opacity: '0', transform: 'scale(0.8)' },
+              '60%': { transform: 'scale(1.05)' },
+              '100%': { opacity: '1', transform: 'scale(1)' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-6px)' },
+            },
+            progressFill: {
+              from: { width: '0%' },
+              to: { width: 'var(--progress)' },
+            },
+          },
+          animation: {
+            'fade-up': 'fadeUp 0.5s ease-out both',
+            'fade-in': 'fadeIn 0.3s ease-out both',
+            'slide-down': 'slideDown 0.3s ease-out both',
+            'flip': 'flip 0.45s cubic-bezier(0.35, 0, 0.25, 1) both',
+            'blink': 'blink 1s ease-in-out infinite',
+            'shimmer': 'shimmer 2s linear infinite',
+            'pop-in': 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both',
+            'float': 'float 3s ease-in-out infinite',
+            'progress-fill': 'progressFill 1s ease-out both',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .glass {
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .shimmer-bg {
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+      background-size: 200% 100%;
+    }
+    .time-block-shadow {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .card-glow:hover {
+      box-shadow: 0 8px 32px rgba(99,102,241,0.15), 0 2px 8px rgba(0,0,0,0.06);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-lg transition-shadow duration-300 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Input({ label, type = 'text', value, onChange, placeholder, ariaLabel, className = '' }) {
+      return (
+        <div className={className}>
+          {label && (
+            <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">{label}</label>
+          )}
+          <input
+            type={type}
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+            aria-label={ariaLabel || label}
+            className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-base
+                       focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 focus:outline-none
+                       transition-all bg-white placeholder-gray-300"
+          />
+        </div>
+      );
+    }
+
+    function Button({ children, onClick, disabled = false, variant = 'primary', size = 'md', className = '' }) {
+      const base = 'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.97]';
+      const sizes = { sm: 'px-5 py-2.5 text-sm', md: 'px-6 py-3.5 text-base', lg: 'px-8 py-4 text-lg' };
+      const variants = {
+        primary: 'bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-md shadow-indigo-200 hover:shadow-lg hover:shadow-indigo-300 focus:ring-indigo-400 disabled:from-gray-300 disabled:to-gray-300 disabled:shadow-none disabled:cursor-not-allowed',
+        secondary: 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-600 focus:ring-gray-300',
+        danger: 'bg-red-500 hover:bg-red-600 text-white focus:ring-red-400',
+        ghost: 'bg-transparent hover:bg-gray-100 text-gray-500 focus:ring-gray-200',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled} className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Badge({ children, color = 'gray', size = 'sm' }) {
+      const colors = {
+        red: 'bg-red-100 text-red-600 ring-red-200',
+        green: 'bg-emerald-100 text-emerald-600 ring-emerald-200',
+        blue: 'bg-indigo-100 text-indigo-600 ring-indigo-200',
+        amber: 'bg-amber-100 text-amber-600 ring-amber-200',
+        gray: 'bg-gray-100 text-gray-500 ring-gray-200',
+      };
+      const sizes = { sm: 'text-xs px-2.5 py-0.5', md: 'text-sm px-3 py-1' };
+      return (
+        <span className={`inline-flex items-center font-bold rounded-full ring-1 ${colors[color]} ${sizes[size]}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Modal({ isOpen, onClose, title, children }) {
+      useEffect(() => {
+        if (isOpen) document.body.style.overflow = 'hidden';
+        else document.body.style.overflow = '';
+        return () => { document.body.style.overflow = ''; };
+      }, [isOpen]);
+
+      if (!isOpen) return null;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
+          <div
+            className="relative bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 sm:p-8 animate-fade-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5 sm:hidden" />
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="닫기"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M1 1l12 12M13 1L1 13"/>
+                </svg>
+              </button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function TimeBlock({ value, label, accent = false }) {
+      const bg = accent
+        ? 'bg-gradient-to-br from-indigo-600 to-violet-700 time-block-shadow'
+        : 'bg-gradient-to-br from-gray-800 to-gray-900 time-block-shadow';
+      return (
+        <div className="text-center flex-1">
+          <div className={`${bg} text-white rounded-2xl px-2 py-3 sm:py-5 animate-flip`} key={value}>
+            <span className="text-3xl sm:text-5xl font-extrabold tabular-nums tracking-tight">
+              {String(value).padStart(2, '0')}
+            </span>
+          </div>
+          <span className="text-[10px] sm:text-xs text-gray-400 mt-2 block font-medium uppercase tracking-wider">{label}</span>
+        </div>
+      );
+    }
+
+    function Colon() {
+      return (
+        <span className="text-2xl sm:text-4xl font-bold text-gray-300 animate-blink self-start mt-3 sm:mt-5 px-0.5">:</span>
+      );
+    }
+
+    function ProgressBar({ percent, color = 'indigo' }) {
+      const clamp = Math.max(0, Math.min(100, percent));
+      const colors = {
+        indigo: 'from-indigo-400 to-violet-500',
+        red: 'from-red-400 to-rose-500',
+        green: 'from-emerald-400 to-teal-500',
+      };
+      return (
+        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full bg-gradient-to-r ${colors[color]} rounded-full animate-progress-fill`}
+            style={{ width: `${clamp}%`, '--progress': `${clamp}%` }}
+          />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Custom Hooks
+    // ========================================
+    function useLocalStorage(key, initialValue) {
+      const [value, setValue] = useState(() => {
+        try {
+          const stored = localStorage.getItem(key);
+          return stored ? JSON.parse(stored) : initialValue;
+        } catch {
+          return initialValue;
+        }
+      });
+      useEffect(() => {
+        localStorage.setItem(key, JSON.stringify(value));
+      }, [key, value]);
+      return [value, setValue];
+    }
+
+    function useNow(intervalMs = 1000) {
+      const [now, setNow] = useState(new Date());
+      useEffect(() => {
+        const id = setInterval(() => setNow(new Date()), intervalMs);
+        return () => clearInterval(id);
+      }, [intervalMs]);
+      return now;
+    }
+
+    // ========================================
+    // D-Day Calculation Logic
+    // ========================================
+    function calcDday(targetDate, now) {
+      const target = new Date(targetDate);
+      target.setHours(0, 0, 0, 0);
+      const todayMidnight = new Date(now);
+      todayMidnight.setHours(0, 0, 0, 0);
+
+      const diffMs = target - now;
+      const diffDays = Math.ceil((target - todayMidnight) / (1000 * 60 * 60 * 24));
+      const isPast = diffMs <= 0;
+      const absDiffMs = Math.abs(diffMs);
+
+      const days = Math.floor(absDiffMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((absDiffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((absDiffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((absDiffMs % (1000 * 60)) / 1000);
+
+      return { days, hours, minutes, seconds, diffDays, isPast };
+    }
+
+    function formatKoreanDate(dateStr) {
+      const d = new Date(dateStr);
+      const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${weekdays[d.getDay()]})`;
+    }
+
+    // ========================================
+    // Page Components
+    // ========================================
+    function DdayItem({ item, now, onDelete, isFirst }) {
+      const { days, hours, minutes, seconds, diffDays, isPast } = calcDday(item.date, now);
+      const isToday = diffDays === 0;
+      const ddayText = isToday ? 'D-Day!' : isPast ? `D+${Math.abs(diffDays)}` : `D-${diffDays}`;
+
+      // 진행률 계산: 생성일 ~ 목표일 기준
+      const createdAt = new Date(item.createdAt || item.id);
+      const target = new Date(item.date);
+      const totalSpan = target - createdAt;
+      const elapsed = now - createdAt;
+      const progress = totalSpan > 0 ? Math.min(100, (elapsed / totalSpan) * 100) : 100;
+
+      const badgeColor = isToday ? 'red' : isPast ? 'gray' : diffDays <= 7 ? 'amber' : 'blue';
+
+      return (
+        <div className={`card-glow rounded-2xl p-5 sm:p-6 transition-all duration-300 animate-fade-up
+          ${isFirst && !isPast && !isToday
+            ? 'bg-gradient-to-br from-indigo-50 via-white to-violet-50 border-2 border-indigo-200 shadow-lg shadow-indigo-100'
+            : isToday
+              ? 'bg-gradient-to-br from-red-50 via-white to-rose-50 border-2 border-red-200 shadow-lg shadow-red-100'
+              : isPast
+                ? 'bg-gray-50 border border-gray-200'
+                : 'bg-white border border-gray-100 shadow-sm'
+          }`}
+          style={{ animationDelay: `${isFirst ? 0 : 0.1}s` }}
+        >
+          {/* 상단 정보 영역 */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge color={badgeColor} size={isFirst ? 'md' : 'sm'}>{ddayText}</Badge>
+                {isFirst && !isPast && !isToday && (
+                  <Badge color="green" size="sm">가장 가까운 목표</Badge>
+                )}
+              </div>
+              <h3 className={`font-bold truncate mt-2 ${isFirst ? 'text-xl text-gray-900' : 'text-base text-gray-800'}`}>
+                {item.title}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">{formatKoreanDate(item.date)}</p>
+            </div>
+            <button
+              onClick={() => onDelete(item.id)}
+              className="ml-3 w-8 h-8 flex items-center justify-center rounded-full
+                         opacity-0 group-hover:opacity-100 hover:!opacity-100
+                         bg-transparent hover:bg-red-50 text-gray-300 hover:text-red-400
+                         transition-all duration-200"
+              aria-label="삭제"
+              style={{ opacity: undefined }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+              onMouseLeave={e => e.currentTarget.style.opacity = ''}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M1 1l12 12M13 1L1 13"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* 타이머 */}
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-4">
+            <TimeBlock value={days} label="일" accent={isFirst && !isPast} />
+            <Colon />
+            <TimeBlock value={hours} label="시간" accent={isFirst && !isPast} />
+            <Colon />
+            <TimeBlock value={minutes} label="분" accent={isFirst && !isPast} />
+            <Colon />
+            <TimeBlock value={seconds} label="초" accent={isFirst && !isPast} />
+          </div>
+
+          {/* 진행률 바 */}
+          {!isPast && !isToday && (
+            <div className="mt-1">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[10px] text-gray-400">진행률</span>
+                <span className="text-[10px] font-semibold text-indigo-500 tabular-nums">{Math.round(progress)}%</span>
+              </div>
+              <ProgressBar percent={progress} />
+            </div>
+          )}
+
+          {/* 상태 메시지 */}
+          {isToday && (
+            <div className="text-center mt-2 py-2 bg-red-100 rounded-lg">
+              <p className="text-sm font-bold text-red-500 animate-blink">오늘이 바로 그 날입니다!</p>
+            </div>
+          )}
+          {isPast && !isToday && (
+            <p className="text-center text-xs text-gray-400 mt-2">목표일로부터 {Math.abs(diffDays)}일이 지났습니다</p>
+          )}
+        </div>
+      );
+    }
+
+    function AddDdayForm({ onAdd, onClose }) {
+      const [title, setTitle] = useState('');
+      const [date, setDate] = useState('');
+
+      const presets = [
+        { label: '1주 후', offset: 7 },
+        { label: '30일 후', offset: 30 },
+        { label: '100일 후', offset: 100 },
+        { label: '1년 후', offset: 365 },
+      ];
+
+      const applyPreset = useCallback((offset) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        setDate(d.toISOString().split('T')[0]);
+      }, []);
+
+      const handleSubmit = useCallback(() => {
+        if (!title.trim() || !date) return;
+        onAdd({ id: Date.now(), title: title.trim(), date, createdAt: new Date().toISOString() });
+        onClose();
+      }, [title, date, onAdd, onClose]);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter' && title.trim() && date) handleSubmit();
+      }, [title, date, handleSubmit]);
+
+      return (
+        <div onKeyDown={handleKeyDown}>
+          <Input label="이벤트 이름" value={title} onChange={setTitle} placeholder="시험, 여행, 생일..." ariaLabel="이벤트 이름" className="mb-5" />
+          <Input label="목표 날짜" type="date" value={date} onChange={setDate} ariaLabel="목표 날짜" className="mb-3" />
+
+          {/* 빠른 선택 */}
+          <div className="flex gap-2 mb-6">
+            {presets.map(p => (
+              <button
+                key={p.offset}
+                onClick={() => applyPreset(p.offset)}
+                className="flex-1 py-2 text-xs font-medium text-indigo-500 bg-indigo-50 hover:bg-indigo-100
+                           rounded-lg transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <Button onClick={onClose} variant="secondary" size="md" className="flex-1">취소</Button>
+            <Button onClick={handleSubmit} disabled={!title.trim() || !date} size="md" className="flex-1">추가하기</Button>
+          </div>
+        </div>
+      );
+    }
+
+    function EmptyState({ onAdd }) {
+      return (
+        <div className="text-center py-20 animate-fade-up">
+          <div className="text-7xl mb-5 animate-float">🎯</div>
+          <h3 className="text-xl font-bold text-gray-700 mb-2">D-Day를 추가해보세요</h3>
+          <p className="text-sm text-gray-400 mb-8 leading-relaxed">
+            목표 날짜를 설정하면<br />실시간 카운트다운이 시작됩니다
+          </p>
+          <Button onClick={onAdd} size="md">
+            첫 번째 D-Day 추가하기
+          </Button>
+        </div>
+      );
+    }
+
+    function LiveClock({ now }) {
+      const pad = n => String(n).padStart(2, '0');
+      const weekdays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+      return (
+        <div className="glass rounded-2xl px-5 py-4 text-center mb-6 border border-white/50 shadow-sm">
+          <p className="text-xs text-gray-400 mb-1 font-medium uppercase tracking-wider">현재 시각</p>
+          <p className="text-2xl sm:text-3xl font-bold tabular-nums gradient-text">
+            {pad(now.getHours())}:{pad(now.getMinutes())}:{pad(now.getSeconds())}
+          </p>
+          <p className="text-xs text-gray-400 mt-1.5">
+            {now.getFullYear()}.{pad(now.getMonth() + 1)}.{pad(now.getDate())} {weekdays[now.getDay()]}
+          </p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [items, setItems] = useLocalStorage('dday-items-v2', []);
+      const [modalOpen, setModalOpen] = useState(false);
+      const now = useNow(1000);
+
+      const handleAdd = useCallback((item) => {
+        setItems(prev => [item, ...prev]);
+      }, []);
+
+      const handleDelete = useCallback((id) => {
+        setItems(prev => prev.filter(item => item.id !== id));
+      }, []);
+
+      // 미래 목표를 먼저, 그 안에서 날짜 오름차순. 지난 목표는 뒤로.
+      const sorted = useMemo(() => {
+        const future = items.filter(i => !calcDday(i.date, now).isPast || calcDday(i.date, now).diffDays === 0);
+        const past = items.filter(i => calcDday(i.date, now).isPast && calcDday(i.date, now).diffDays !== 0);
+        future.sort((a, b) => new Date(a.date) - new Date(b.date));
+        past.sort((a, b) => new Date(b.date) - new Date(a.date));
+        return [...future, ...past];
+      }, [items, Math.floor(now.getTime() / 60000)]); // 분 단위로만 재정렬
+
+      const futureCount = items.filter(i => !calcDday(i.date, now).isPast).length;
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-violet-50 p-4 sm:p-6">
+          <div className="max-w-lg mx-auto">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-6 pt-4 sm:pt-6">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-extrabold">
+                  <span className="gradient-text">D-Day</span>
+                  <span className="text-gray-800"> 카운터</span>
+                </h1>
+                <p className="text-sm text-gray-400 mt-1.5">
+                  {items.length > 0
+                    ? `${items.length}개 등록 · ${futureCount}개 진행 중`
+                    : '목표까지 남은 시간을 실시간으로'
+                  }
+                </p>
+              </div>
+              <button
+                onClick={() => setModalOpen(true)}
+                className="w-12 h-12 flex items-center justify-center rounded-2xl
+                           bg-gradient-to-br from-indigo-500 to-violet-500
+                           text-white text-2xl font-light shadow-lg shadow-indigo-200
+                           hover:shadow-xl hover:shadow-indigo-300 hover:scale-105
+                           active:scale-95 transition-all duration-200"
+                aria-label="D-Day 추가"
+              >
+                +
+              </button>
+            </div>
+
+            {/* 실시간 시계 */}
+            <LiveClock now={now} />
+
+            {/* D-Day 목록 */}
+            {sorted.length === 0 ? (
+              <Card className="p-6">
+                <EmptyState onAdd={() => setModalOpen(true)} />
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {sorted.map((item, idx) => (
+                  <DdayItem
+                    key={item.id}
+                    item={item}
+                    now={now}
+                    onDelete={handleDelete}
+                    isFirst={idx === 0 && !calcDday(item.date, now).isPast}
+                  />
+                ))}
+              </div>
+            )}
+
+            <p className="text-center text-gray-300 text-xs mt-10 mb-4">
+              매초 실시간 업데이트 · 데이터는 브라우저에 자동 저장됩니다
+            </p>
+          </div>
+
+          {/* 추가 모달 */}
+          <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="새 D-Day 추가">
+            <AddDdayForm onAdd={handleAdd} onClose={() => setModalOpen(false)} />
+          </Modal>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
