@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 800px; height: 600px; overflow: hidden; }
+  .container {
+    width: 800px; height: 600px;
+    position: relative;
+    background-image: url('https://images.unsplash.com/photo-1600688654899-379ec76aca42?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixlib=rb-4.1.0&q=80&w=1080');
+    background-size: cover;
+    background-position: center;
+  }
+  .overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    padding: 60px 30px 30px;
+    color: white;
+  }
+  .title {
+    font-family: 'Apple SD Gothic Neo', -apple-system, sans-serif;
+    font-size: 38px; font-weight: 800;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+  .info {
+    font-family: 'Apple SD Gothic Neo', -apple-system, sans-serif;
+    font-size: 18px; opacity: 0.9;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.5);
+  }
+  .badge {
+    position: absolute; top: 20px; left: 20px;
+    background: #e74c3c; color: white;
+    padding: 8px 18px; border-radius: 20px;
+    font-family: 'Apple SD Gothic Neo', -apple-system, sans-serif;
+    font-size: 15px; font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">초간단 레시피</div>
+    <div class="overlay">
+      <div class="title">김치볶음밥</div>
+      <div class="info">10분 완성 | 1인분 | 난이도 ★ 쉬움</div>
+    </div>
+  </div>
+</body>
+</html>
