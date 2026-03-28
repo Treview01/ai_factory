@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>색상 팔레트 생성기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          keyframes: {
+            fadeUp: {
+              from: { opacity: '0', transform: 'translateY(20px)' },
+              to: { opacity: '1', transform: 'translateY(0)' },
+            },
+            popIn: {
+              '0%': { opacity: '0', transform: 'scale(0.85)' },
+              '60%': { transform: 'scale(1.03)' },
+              '100%': { opacity: '1', transform: 'scale(1)' },
+            },
+            slideIn: {
+              from: { opacity: '0', transform: 'translateX(-12px)' },
+              to: { opacity: '1', transform: 'translateX(0)' },
+            },
+          },
+          animation: {
+            'fade-up': 'fadeUp 0.4s ease-out both',
+            'pop-in': 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both',
+            'slide-in': 'slideIn 0.3s ease-out both',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .glass {
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .checkerboard {
+      background-image:
+        linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+        linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+        linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+      background-size: 12px 12px;
+      background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+    }
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: none;
+      cursor: pointer;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 12px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useCallback, useMemo, useEffect, useRef } = React;
+
+    // ========================================
+    // Color Utility Functions
+    // ========================================
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      return {
+        r: parseInt(h.substring(0, 2), 16),
+        g: parseInt(h.substring(2, 4), 16),
+        b: parseInt(h.substring(4, 6), 16),
+      };
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+    }
+
+    function rgbToHsl(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) { h = s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+          case g: h = ((b - r) / d + 2) / 6; break;
+          case b: h = ((r - g) / d + 4) / 6; break;
+        }
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
+    function hslToRgb(h, s, l) {
+      h /= 360; s /= 100; l /= 100;
+      let r, g, b;
+      if (s === 0) { r = g = b = l; }
+      else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1; if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+    }
+
+    function rgbToCmyk(r, g, b) {
+      r /= 255; g /= 255; b /= 255;
+      const k = 1 - Math.max(r, g, b);
+      if (k === 1) return { c: 0, m: 0, y: 0, k: 100 };
+      return {
+        c: Math.round(((1 - r - k) / (1 - k)) * 100),
+        m: Math.round(((1 - g - k) / (1 - k)) * 100),
+        y: Math.round(((1 - b - k) / (1 - k)) * 100),
+        k: Math.round(k * 100),
+      };
+    }
+
+    function getContrastColor(hex) {
+      const { r, g, b } = hexToRgb(hex);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.55 ? '#1a1a2e' : '#ffffff';
+    }
+
+    function generateShades(hex, count = 5) {
+      const { r, g, b } = hexToRgb(hex);
+      const { h, s, l } = rgbToHsl(r, g, b);
+      const lighter = [];
+      const darker = [];
+      for (let i = 1; i <= count; i++) {
+        const lLight = Math.min(98, l + (100 - l) * (i / (count + 1)));
+        const rgbL = hslToRgb(h, Math.max(s - i * 3, 5), lLight);
+        lighter.push(rgbToHex(rgbL.r, rgbL.g, rgbL.b));
+
+        const lDark = Math.max(5, l - l * (i / (count + 1)));
+        const rgbD = hslToRgb(h, Math.min(s + i * 2, 100), lDark);
+        darker.push(rgbToHex(rgbD.r, rgbD.g, rgbD.b));
+      }
+      return { lighter: lighter.reverse(), darker };
+    }
+
+    function isValidHex(hex) {
+      return /^#?[0-9A-Fa-f]{6}$/.test(hex);
+    }
+
+    // ========================================
+    // Design System Components
+    // ========================================
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-lg ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Button({ children, onClick, variant = 'primary', size = 'md', className = '', disabled = false }) {
+      const base = 'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 active:scale-[0.97]';
+      const sizes = { sm: 'px-4 py-2 text-sm', md: 'px-5 py-3 text-base' };
+      const variants = {
+        primary: 'bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white shadow-md shadow-indigo-200 focus:ring-indigo-400 disabled:from-gray-300 disabled:to-gray-300 disabled:shadow-none disabled:cursor-not-allowed',
+        secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-600 focus:ring-gray-300',
+        ghost: 'bg-transparent hover:bg-gray-100 text-gray-500 focus:ring-gray-200',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled} className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Badge({ children, color = 'gray' }) {
+      const colors = {
+        blue: 'bg-indigo-100 text-indigo-600',
+        green: 'bg-emerald-100 text-emerald-600',
+        amber: 'bg-amber-100 text-amber-700',
+        gray: 'bg-gray-100 text-gray-500',
+        pink: 'bg-pink-100 text-pink-600',
+      };
+      return (
+        <span className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-full ${colors[color]}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Tabs({ tabs, active, onChange }) {
+      return (
+        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => onChange(tab.key)}
+              className={`flex-1 py-2.5 px-3 text-sm font-semibold rounded-lg transition-all duration-200
+                ${active === tab.key
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-600'
+                }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function CopyButton({ text }) {
+      const [copied, setCopied] = useState(false);
+      const handleCopy = useCallback(() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }, [text]);
+      return (
+        <button
+          onClick={handleCopy}
+          className={`px-2 py-1 rounded-md text-xs font-medium transition-all duration-200
+            ${copied
+              ? 'bg-emerald-100 text-emerald-600'
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-400 hover:text-gray-600'
+            }`}
+          aria-label={`${text} 복사`}
+        >
+          {copied ? '복사됨!' : '복사'}
+        </button>
+      );
+    }
+
+    // ========================================
+    // Feature Components
+    // ========================================
+    function ColorSwatch({ hex, label, size = 'md', delay = 0 }) {
+      const contrast = getContrastColor(hex);
+      const sizes = {
+        sm: 'h-16 rounded-xl',
+        md: 'h-24 rounded-2xl',
+        lg: 'h-32 rounded-2xl',
+      };
+      return (
+        <div className="animate-pop-in" style={{ animationDelay: `${delay}ms` }}>
+          <div
+            className={`${sizes[size]} flex flex-col items-center justify-center cursor-pointer
+                        hover:scale-105 transition-transform duration-200 shadow-sm hover:shadow-md`}
+            style={{ backgroundColor: hex, color: contrast }}
+            onClick={() => navigator.clipboard.writeText(hex)}
+            title="클릭하여 복사"
+          >
+            <span className="text-sm font-bold tracking-wide opacity-90">{hex.toUpperCase()}</span>
+            {label && <span className="text-[10px] mt-0.5 opacity-60">{label}</span>}
+          </div>
+        </div>
+      );
+    }
+
+    function PaletteStrip({ colors, label }) {
+      return (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-sm font-bold text-gray-700">{label}</h3>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {colors.map((hex, i) => (
+              <ColorSwatch
+                key={hex + i}
+                hex={hex}
+                label={`${i + 1}`}
+                size="sm"
+                delay={i * 60}
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 같은 정보, 다른 형태 — View Modes
+    function ViewPalette({ baseHex, shades }) {
+      return (
+        <div className="animate-fade-up">
+          <ColorSwatch hex={baseHex} label="기준 색상" size="lg" />
+          <div className="mt-6">
+            <PaletteStrip colors={shades.lighter} label="밝은 변형 (Tints)" />
+            <PaletteStrip colors={shades.darker} label="어두운 변형 (Shades)" />
+          </div>
+        </div>
+      );
+    }
+
+    function ViewGradientBar({ baseHex, shades }) {
+      const all = [...shades.lighter, baseHex, ...shades.darker];
+      const gradientCSS = `linear-gradient(to right, ${all.join(', ')})`;
+      return (
+        <div className="animate-fade-up">
+          <div className="h-20 rounded-2xl shadow-inner mb-4" style={{ background: gradientCSS }} />
+          <div className="grid grid-cols-11 gap-1">
+            {all.map((hex, i) => (
+              <div key={i} className="text-center">
+                <div className="h-8 rounded-lg mb-1" style={{ backgroundColor: hex }} />
+                <span className="text-[9px] text-gray-400 font-mono">{hex.toUpperCase()}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-3 bg-gray-50 rounded-xl">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">CSS Gradient</span>
+              <CopyButton text={`background: ${gradientCSS};`} />
+            </div>
+            <p className="text-xs font-mono text-gray-600 mt-2 break-all leading-relaxed">{gradientCSS}</p>
+          </div>
+        </div>
+      );
+    }
+
+    function ViewCodeTable({ baseHex }) {
+      const { r, g, b } = hexToRgb(baseHex);
+      const hsl = rgbToHsl(r, g, b);
+      const cmyk = rgbToCmyk(r, g, b);
+
+      const formats = [
+        { label: 'HEX', value: baseHex.toUpperCase(), color: 'blue' },
+        { label: 'RGB', value: `rgb(${r}, ${g}, ${b})`, color: 'green' },
+        { label: 'HSL', value: `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`, color: 'amber' },
+        { label: 'CMYK', value: `cmyk(${cmyk.c}%, ${cmyk.m}%, ${cmyk.y}%, ${cmyk.k}%)`, color: 'pink' },
+        { label: 'CSS Variable', value: `--color-primary: ${baseHex};`, color: 'blue' },
+        { label: 'Tailwind', value: `"primary": "${baseHex}"`, color: 'green' },
+      ];
+
+      return (
+        <div className="animate-fade-up space-y-3">
+          {/* 큰 색상 미리보기 */}
+          <div className="flex gap-4 mb-6">
+            <div className="w-28 h-28 rounded-2xl shadow-lg flex-shrink-0" style={{ backgroundColor: baseHex }} />
+            <div className="flex-1 flex flex-col justify-center">
+              <p className="text-2xl font-extrabold text-gray-800">{baseHex.toUpperCase()}</p>
+              <p className="text-sm text-gray-400 mt-1">R:{r} G:{g} B:{b}</p>
+              <p className="text-sm text-gray-400">H:{hsl.h}° S:{hsl.s}% L:{hsl.l}%</p>
+            </div>
+          </div>
+
+          {/* 코드 형식 리스트 */}
+          {formats.map((fmt, i) => (
+            <div
+              key={fmt.label}
+              className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl animate-slide-in"
+              style={{ animationDelay: `${i * 50}ms` }}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Badge color={fmt.color}>{fmt.label}</Badge>
+                <code className="text-sm font-mono text-gray-700 truncate">{fmt.value}</code>
+              </div>
+              <CopyButton text={fmt.value} />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function ViewAccessibility({ baseHex }) {
+      const contrast = getContrastColor(baseHex);
+      const { r, g, b } = hexToRgb(baseHex);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+      const whiteRgb = { r: 255, g: 255, b: 255 };
+      const blackRgb = { r: 0, g: 0, b: 0 };
+
+      function relativeLuminance(rgb) {
+        const [rs, gs, bs] = [rgb.r, rgb.g, rgb.b].map(c => {
+          c /= 255;
+          return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+      }
+
+      function contrastRatio(l1, l2) {
+        const lighter = Math.max(l1, l2);
+        const darker = Math.min(l1, l2);
+        return ((lighter + 0.05) / (darker + 0.05)).toFixed(2);
+      }
+
+      const baseLum = relativeLuminance({ r, g, b });
+      const whiteRatio = contrastRatio(relativeLuminance(whiteRgb), baseLum);
+      const blackRatio = contrastRatio(baseLum, relativeLuminance(blackRgb));
+
+      const wcagCheck = (ratio) => ({
+        aaLarge: ratio >= 3,
+        aa: ratio >= 4.5,
+        aaa: ratio >= 7,
+      });
+
+      const whiteWcag = wcagCheck(whiteRatio);
+      const blackWcag = wcagCheck(blackRatio);
+
+      function WcagRow({ label, bg, fg, ratio, wcag }) {
+        return (
+          <div className="p-4 rounded-xl border border-gray-100" style={{ backgroundColor: bg }}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-bold" style={{ color: fg }}>{label}</span>
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/20" style={{ color: fg }}>
+                {ratio}:1
+              </span>
+            </div>
+            <p className="text-lg font-bold mb-3" style={{ color: fg }}>
+              가나다라 ABC 123
+            </p>
+            <div className="flex gap-2">
+              {[
+                { label: 'AA Large', pass: wcag.aaLarge },
+                { label: 'AA', pass: wcag.aa },
+                { label: 'AAA', pass: wcag.aaa },
+              ].map(item => (
+                <span
+                  key={item.label}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                    ${item.pass ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                >
+                  {item.pass ? '✓' : '✗'} {item.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="animate-fade-up space-y-4">
+          <div className="p-4 bg-gray-50 rounded-xl">
+            <span className="text-xs text-gray-400 font-medium">밝기 (Luminance)</span>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex-1 h-3 bg-gradient-to-r from-gray-900 via-gray-400 to-white rounded-full relative">
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white border-2 border-gray-800 rounded-full shadow"
+                  style={{ left: `${luminance * 100}%`, marginLeft: '-8px' }}
+                />
+              </div>
+              <span className="text-sm font-mono text-gray-600 w-12 text-right">{(luminance * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+
+          <WcagRow label="흰색 텍스트 on 이 색상" bg={baseHex} fg="#ffffff" ratio={whiteRatio} wcag={whiteWcag} />
+          <WcagRow label="검은색 텍스트 on 이 색상" bg={baseHex} fg="#000000" ratio={blackRatio} wcag={blackWcag} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Page Component
+    // ========================================
+    function ColorPaletteGenerator() {
+      const [hexInput, setHexInput] = useState('#6366f1');
+      const [activeColor, setActiveColor] = useState('#6366f1');
+      const [viewMode, setViewMode] = useState('palette');
+      const [history, setHistory] = useLocalStorage('palette-history', []);
+      const inputRef = useRef(null);
+
+      const shades = useMemo(() => generateShades(activeColor), [activeColor]);
+
+      const handleApply = useCallback(() => {
+        const cleaned = hexInput.startsWith('#') ? hexInput : `#${hexInput}`;
+        if (!isValidHex(cleaned)) return;
+        setActiveColor(cleaned.toLowerCase());
+        setHistory(prev => {
+          const filtered = prev.filter(c => c !== cleaned.toLowerCase());
+          return [cleaned.toLowerCase(), ...filtered].slice(0, 12);
+        });
+      }, [hexInput]);
+
+      const handlePickerChange = useCallback((e) => {
+        const val = e.target.value;
+        setHexInput(val);
+        setActiveColor(val);
+        setHistory(prev => {
+          const filtered = prev.filter(c => c !== val);
+          return [val, ...filtered].slice(0, 12);
+        });
+      }, []);
+
+      const handleKeyDown = useCallback((e) => {
+        if (e.key === 'Enter') handleApply();
+      }, [handleApply]);
+
+      const handleRandom = useCallback(() => {
+        const hex = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+        setHexInput(hex);
+        setActiveColor(hex);
+        setHistory(prev => {
+          const filtered = prev.filter(c => c !== hex);
+          return [hex, ...filtered].slice(0, 12);
+        });
+      }, []);
+
+      const viewTabs = [
+        { key: 'palette', label: '팔레트' },
+        { key: 'gradient', label: '그라디언트' },
+        { key: 'code', label: '코드' },
+        { key: 'a11y', label: '접근성' },
+      ];
+
+      const isValid = isValidHex(hexInput.startsWith('#') ? hexInput : `#${hexInput}`);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-slate-50 to-pink-50 p-4 sm:p-6">
+          <div className="max-w-xl mx-auto">
+            {/* 헤더 */}
+            <div className="text-center pt-4 sm:pt-8 mb-8">
+              <h1 className="text-3xl sm:text-4xl font-extrabold">
+                <span className="gradient-text">색상 팔레트</span>
+                <span className="text-gray-800"> 생성기</span>
+              </h1>
+              <p className="text-sm text-gray-400 mt-2">HEX 코드를 입력하면 밝은/어두운 변형을 생성합니다</p>
+            </div>
+
+            {/* 입력 영역 */}
+            <Card className="p-6 mb-6">
+              <div className="flex gap-3 mb-4">
+                {/* Color Picker */}
+                <div className="relative flex-shrink-0">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden checkerboard shadow-inner">
+                    <input
+                      type="color"
+                      value={activeColor}
+                      onChange={handlePickerChange}
+                      className="w-full h-full cursor-pointer"
+                      aria-label="색상 선택기"
+                    />
+                  </div>
+                </div>
+
+                {/* HEX Input */}
+                <div className="flex-1 relative">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={hexInput}
+                    onChange={e => setHexInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="#6366f1"
+                    maxLength={7}
+                    className={`w-full px-4 py-3.5 border-2 rounded-xl text-lg font-mono
+                      focus:outline-none focus:ring-4 transition-all
+                      ${isValid
+                        ? 'border-gray-200 focus:border-indigo-400 focus:ring-indigo-50'
+                        : 'border-red-300 focus:border-red-400 focus:ring-red-50'
+                      }`}
+                    aria-label="HEX 코드 입력"
+                  />
+                  {!isValid && hexInput.length > 1 && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red-400">유효하지 않은 코드</span>
+                  )}
+                </div>
+              </div>
+
+              {/* 버튼 */}
+              <div className="flex gap-2">
+                <Button onClick={handleApply} disabled={!isValid} className="flex-1">생성하기</Button>
+                <Button onClick={handleRandom} variant="secondary" className="flex-shrink-0">랜덤</Button>
+              </div>
+
+              {/* 최근 사용 색상 */}
+              {history.length > 0 && (
+                <div className="mt-5 pt-5 border-t border-gray-100">
+                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">최근 사용</span>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {history.map(hex => (
+                      <button
+                        key={hex}
+                        onClick={() => { setHexInput(hex); setActiveColor(hex); }}
+                        className="w-8 h-8 rounded-lg shadow-sm hover:scale-110 transition-transform ring-2 ring-white hover:ring-indigo-200"
+                        style={{ backgroundColor: hex }}
+                        title={hex}
+                        aria-label={`${hex} 선택`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            {/* 뷰 모드 탭 */}
+            <div className="mb-5">
+              <Tabs tabs={viewTabs} active={viewMode} onChange={setViewMode} />
+            </div>
+
+            {/* 결과 영역 */}
+            <Card className="p-6" key={viewMode + activeColor}>
+              {viewMode === 'palette' && <ViewPalette baseHex={activeColor} shades={shades} />}
+              {viewMode === 'gradient' && <ViewGradientBar baseHex={activeColor} shades={shades} />}
+              {viewMode === 'code' && <ViewCodeTable baseHex={activeColor} />}
+              {viewMode === 'a11y' && <ViewAccessibility baseHex={activeColor} />}
+            </Card>
+
+            <p className="text-center text-gray-300 text-xs mt-8 mb-4">
+              색상을 클릭하면 HEX 코드가 복사됩니다
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // Custom Hooks
+    // ========================================
+    function useLocalStorage(key, initialValue) {
+      const [value, setValue] = useState(() => {
+        try {
+          const stored = localStorage.getItem(key);
+          return stored ? JSON.parse(stored) : initialValue;
+        } catch { return initialValue; }
+      });
+      useEffect(() => {
+        localStorage.setItem(key, JSON.stringify(value));
+      }, [key, value]);
+      return [value, setValue];
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      return <ColorPaletteGenerator />;
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
