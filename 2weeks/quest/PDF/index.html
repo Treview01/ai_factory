@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF 생성기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            ios: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Helvetica Neue', 'sans-serif'],
+          },
+          colors: {
+            ios: {
+              bg: '#f2f2f7', card: '#ffffff', blue: '#007aff', green: '#34c759',
+              red: '#ff3b30', orange: '#ff9500', purple: '#af52de',
+              gray1: '#8e8e93', gray2: '#aeaeb2', gray3: '#c7c7cc',
+              gray4: '#d1d1d6', gray5: '#e5e5ea', label: '#000000',
+              separator: 'rgba(60,60,67,0.12)',
+            },
+          },
+          keyframes: {
+            iosSlideUp: { from: { opacity: '0', transform: 'translateY(20px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+            iosFade: { from: { opacity: '0' }, to: { opacity: '1' } },
+          },
+          animation: {
+            'ios-slide': 'iosSlideUp 0.35s cubic-bezier(0.2,0.9,0.3,1) both',
+            'ios-fade': 'iosFade 0.25s ease both',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background: #f2f2f7; -webkit-font-smoothing: antialiased; }
+    .ios-inset { border-radius: 10px; }
+    .ios-separator { height: 0.5px; background: rgba(60,60,67,0.12); margin-left: 16px; }
+    textarea:focus { outline: none; }
+    @media print { body { background: white; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useCallback, useRef, useEffect } = React;
+
+    // ========================================
+    // Design System Components (iOS Style)
+    // ========================================
+    function IOSGroupedCard({ title, footer, children, className = '' }) {
+      return (
+        <div className={`mb-6 ${className}`}>
+          {title && <h2 className="text-[13px] font-normal text-ios-gray1 uppercase tracking-wide px-5 mb-[6px] font-ios">{title}</h2>}
+          <div className="bg-ios-card ios-inset overflow-hidden">{children}</div>
+          {footer && <p className="text-[13px] text-ios-gray1 px-5 mt-[6px] font-ios">{footer}</p>}
+        </div>
+      );
+    }
+
+    function IOSRow({ label, value, right, isLast = false }) {
+      return (
+        <>
+          <div className="flex items-center justify-between px-4 py-[11px]">
+            <span className="text-[17px] font-ios text-ios-label">{label}</span>
+            <div className="flex items-center gap-1">
+              {value && <span className="text-[17px] font-ios text-ios-gray1">{value}</span>}
+              {right}
+            </div>
+          </div>
+          {!isLast && <div className="ios-separator" />}
+        </>
+      );
+    }
+
+    function IOSSegment({ options, value, onChange }) {
+      return (
+        <div className="flex bg-ios-gray5 rounded-[9px] p-[2px]">
+          {options.map(opt => (
+            <button key={opt.value} onClick={() => onChange(opt.value)}
+              className={`flex-1 py-[6px] px-2 text-[13px] font-semibold font-ios rounded-[7px] transition-all duration-200
+                ${value === opt.value ? 'bg-white text-ios-label shadow-sm' : 'text-ios-gray1'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function IOSToggle({ checked, onChange }) {
+      return (
+        <button onClick={() => onChange(!checked)} role="switch" aria-checked={checked}
+          className={`relative w-[51px] h-[31px] rounded-full transition-colors duration-200 flex-shrink-0
+            ${checked ? 'bg-ios-green' : 'bg-ios-gray5'}`}>
+          <div className={`absolute top-[2px] w-[27px] h-[27px] bg-white rounded-full shadow-md transition-transform duration-200
+            ${checked ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+        </button>
+      );
+    }
+
+    function IOSButton({ children, onClick, variant = 'primary', disabled = false, className = '' }) {
+      const variants = {
+        primary: 'bg-ios-blue text-white active:bg-blue-600 disabled:bg-ios-gray4 disabled:text-ios-gray2',
+        secondary: 'bg-ios-gray5 text-ios-blue active:bg-ios-gray4',
+        danger: 'bg-ios-red text-white active:bg-red-600',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`w-full py-[14px] rounded-[14px] text-[17px] font-semibold font-ios transition-colors disabled:cursor-not-allowed ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function IOSSheet({ isOpen, onClose, title, children }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/30 animate-ios-fade" />
+          <div className="relative bg-ios-bg w-full max-w-lg rounded-t-[14px] max-h-[85vh] overflow-y-auto animate-ios-slide pb-8"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1"><div className="w-9 h-[5px] bg-ios-gray3 rounded-full" /></div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <div className="w-16" />
+              <h2 className="text-[17px] font-semibold font-ios text-ios-label">{title}</h2>
+              <button onClick={onClose} className="text-ios-blue text-[17px] font-ios w-16 text-right">완료</button>
+            </div>
+            <div className="px-4">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // PDF Generation Logic (jsPDF)
+    // ========================================
+    async function loadNanumFont(doc) {
+      // 한글 폰트 로드 (Google Fonts - Nanum Gothic)
+      const fontUrl = 'https://cdn.jsdelivr.net/gh/niceplugin/NanumSquareRound/fonts/NanumSquareRoundR.ttf';
+      try {
+        const resp = await fetch(fontUrl);
+        const buf = await resp.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        doc.addFileToVFS('NanumSquareRound.ttf', base64);
+        doc.addFont('NanumSquareRound.ttf', 'NanumSquareRound', 'normal');
+        doc.setFont('NanumSquareRound');
+        return true;
+      } catch (e) {
+        console.warn('한글 폰트 로드 실패, 기본 폰트 사용', e);
+        return false;
+      }
+    }
+
+    async function generatePDF(options) {
+      const { jsPDF } = window.jspdf;
+
+      const orientMap = { portrait: 'p', landscape: 'l' };
+      const doc = new jsPDF({
+        orientation: orientMap[options.orientation] || 'p',
+        unit: 'mm',
+        format: options.pageSize.toLowerCase(),
+      });
+
+      // 한글 폰트 로드
+      const fontLoaded = await loadNanumFont(doc);
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = options.margin;
+      const contentWidth = pageWidth - margin * 2;
+
+      let cursorY = margin;
+
+      // 제목
+      if (options.title) {
+        doc.setFontSize(options.titleSize);
+        if (options.titleBold) doc.setFont(fontLoaded ? 'NanumSquareRound' : 'helvetica', 'normal');
+        doc.setTextColor(options.titleColor);
+        const titleLines = doc.splitTextToSize(options.title, contentWidth);
+        doc.text(titleLines, pageWidth / 2, cursorY + options.titleSize * 0.35, { align: 'center' });
+        cursorY += titleLines.length * (options.titleSize * 0.45) + 6;
+
+        if (options.showTitleLine) {
+          doc.setDrawColor(200, 200, 200);
+          doc.setLineWidth(0.3);
+          doc.line(margin, cursorY, pageWidth - margin, cursorY);
+          cursorY += 6;
+        }
+      }
+
+      // 날짜
+      if (options.showDate) {
+        doc.setFontSize(9);
+        doc.setTextColor(150, 150, 150);
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+        doc.text(dateStr, pageWidth - margin, cursorY, { align: 'right' });
+        cursorY += 6;
+      }
+
+      // 본문
+      doc.setFontSize(options.fontSize);
+      doc.setTextColor(options.textColor);
+
+      const paragraphs = options.content.split('\n');
+      const lineHeight = options.fontSize * 0.45 * options.lineSpacing;
+
+      for (let p = 0; p < paragraphs.length; p++) {
+        const para = paragraphs[p];
+
+        if (para.trim() === '') {
+          cursorY += lineHeight * 0.6;
+          if (cursorY > pageHeight - margin) {
+            doc.addPage();
+            cursorY = margin;
+          }
+          continue;
+        }
+
+        const lines = doc.splitTextToSize(para, contentWidth);
+
+        for (let i = 0; i < lines.length; i++) {
+          if (cursorY + lineHeight > pageHeight - margin) {
+            // 페이지 번호
+            if (options.showPageNum) {
+              doc.setFontSize(9);
+              doc.setTextColor(180, 180, 180);
+              doc.text(String(doc.getNumberOfPages()), pageWidth / 2, pageHeight - 8, { align: 'center' });
+            }
+            doc.addPage();
+            cursorY = margin;
+            doc.setFontSize(options.fontSize);
+            doc.setTextColor(options.textColor);
+          }
+
+          let align = 'left';
+          let x = margin;
+          if (options.textAlign === 'center') { align = 'center'; x = pageWidth / 2; }
+          else if (options.textAlign === 'right') { align = 'right'; x = pageWidth - margin; }
+
+          doc.text(lines[i], x, cursorY, { align });
+          cursorY += lineHeight;
+        }
+
+        // 문단 간격
+        cursorY += lineHeight * 0.3;
+      }
+
+      // 마지막 페이지 번호
+      if (options.showPageNum) {
+        doc.setFontSize(9);
+        doc.setTextColor(180, 180, 180);
+        doc.text(String(doc.getNumberOfPages()), pageWidth / 2, pageHeight - 8, { align: 'center' });
+      }
+
+      return doc;
+    }
+
+    // ========================================
+    // Page Components
+    // ========================================
+    function PDFGenerator() {
+      const [title, setTitle] = useState('');
+      const [content, setContent] = useState('');
+      const [pageSize, setPageSize] = useState('A4');
+      const [orientation, setOrientation] = useState('portrait');
+      const [fontSize, setFontSize] = useState('11');
+      const [titleSize, setTitleSize] = useState('20');
+      const [lineSpacing, setLineSpacing] = useState('1.6');
+      const [margin, setMargin] = useState('20');
+      const [textAlign, setTextAlign] = useState('left');
+      const [showDate, setShowDate] = useState(true);
+      const [showPageNum, setShowPageNum] = useState(true);
+      const [showTitleLine, setShowTitleLine] = useState(true);
+      const [titleColor, setTitleColor] = useState('#1a1a2e');
+      const [textColor, setTextColor] = useState('#333333');
+      const [generating, setGenerating] = useState(false);
+      const [showSettings, setShowSettings] = useState(false);
+      const [previewUrl, setPreviewUrl] = useState(null);
+      const [showPreview, setShowPreview] = useState(false);
+
+      const textareaRef = useRef(null);
+
+      const charCount = content.length;
+      const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+      const lineCount = content ? content.split('\n').length : 0;
+
+      const getOptions = useCallback(() => ({
+        title, content, pageSize, orientation,
+        fontSize: parseInt(fontSize) || 11,
+        titleSize: parseInt(titleSize) || 20,
+        lineSpacing: parseFloat(lineSpacing) || 1.6,
+        margin: parseInt(margin) || 20,
+        textAlign, showDate, showPageNum, showTitleLine,
+        titleColor, textColor, titleBold: true,
+      }), [title, content, pageSize, orientation, fontSize, titleSize, lineSpacing, margin, textAlign, showDate, showPageNum, showTitleLine, titleColor, textColor]);
+
+      const handleGenerate = useCallback(async () => {
+        if (!content.trim()) return;
+        setGenerating(true);
+        try {
+          const doc = await generatePDF(getOptions());
+          const filename = title ? `${title.replace(/[^가-힣a-zA-Z0-9\s]/g, '').trim() || 'document'}.pdf` : 'document.pdf';
+          doc.save(filename);
+        } catch (err) {
+          console.error(err);
+          alert('PDF 생성 중 오류가 발생했습니다.');
+        }
+        setGenerating(false);
+      }, [content, title, getOptions]);
+
+      const handlePreview = useCallback(async () => {
+        if (!content.trim()) return;
+        setGenerating(true);
+        try {
+          const doc = await generatePDF(getOptions());
+          const blob = doc.output('blob');
+          const url = URL.createObjectURL(blob);
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          setPreviewUrl(url);
+          setShowPreview(true);
+        } catch (err) {
+          console.error(err);
+        }
+        setGenerating(false);
+      }, [content, getOptions, previewUrl]);
+
+      const handleReset = useCallback(() => {
+        setTitle(''); setContent('');
+        setPageSize('A4'); setOrientation('portrait');
+        setFontSize('11'); setTitleSize('20');
+        setLineSpacing('1.6'); setMargin('20');
+        setTextAlign('left'); setShowDate(true);
+        setShowPageNum(true); setShowTitleLine(true);
+        setTitleColor('#1a1a2e'); setTextColor('#333333');
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }, [previewUrl]);
+
+      // 클린업
+      useEffect(() => {
+        return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+      }, [previewUrl]);
+
+      return (
+        <div className="min-h-screen bg-ios-bg font-ios pb-10">
+          {/* 네비게이션 */}
+          <div className="bg-ios-bg/80 backdrop-blur-xl sticky top-0 z-40 border-b border-ios-separator">
+            <div className="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between">
+              <button onClick={handleReset} className="text-ios-blue text-[17px]">초기화</button>
+              <h1 className="text-[17px] font-semibold text-ios-label">PDF 생성기</h1>
+              <button onClick={() => setShowSettings(true)} className="text-ios-blue text-[17px]">설정</button>
+            </div>
+          </div>
+
+          <div className="max-w-2xl mx-auto px-4 pt-4">
+            {/* 제목 입력 */}
+            <IOSGroupedCard title="제목">
+              <div className="px-4 py-[11px]">
+                <input
+                  type="text"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  placeholder="PDF 제목을 입력하세요 (선택)"
+                  className="w-full bg-transparent text-[17px] font-ios outline-none placeholder-ios-gray3"
+                />
+              </div>
+            </IOSGroupedCard>
+
+            {/* 본문 입력 */}
+            <IOSGroupedCard title="본문 내용">
+              <div className="px-4 py-3">
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  placeholder="PDF로 변환할 내용을 입력하세요...&#10;&#10;여러 줄을 입력하면 자동으로 줄바꿈됩니다.&#10;빈 줄은 문단 구분으로 처리됩니다."
+                  className="w-full bg-transparent text-[16px] font-ios placeholder-ios-gray3 resize-none leading-relaxed"
+                  rows={14}
+                />
+              </div>
+              <div className="ios-separator" />
+              <div className="px-4 py-2 flex items-center justify-between">
+                <span className="text-[13px] font-ios text-ios-gray1">{charCount}자 · {wordCount}단어 · {lineCount}줄</span>
+                <div className="flex gap-3">
+                  <IOSSegment
+                    options={[
+                      { value: 'A4', label: 'A4' },
+                      { value: 'Letter', label: 'Letter' },
+                      { value: 'A5', label: 'A5' },
+                    ]}
+                    value={pageSize}
+                    onChange={setPageSize}
+                  />
+                </div>
+              </div>
+            </IOSGroupedCard>
+
+            {/* 빠른 설정 */}
+            <IOSGroupedCard title="빠른 설정">
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">방향</span>
+                <IOSSegment
+                  options={[{ value: 'portrait', label: '세로' }, { value: 'landscape', label: '가로' }]}
+                  value={orientation} onChange={setOrientation}
+                />
+              </div>
+              <div className="ios-separator" />
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">정렬</span>
+                <IOSSegment
+                  options={[{ value: 'left', label: '왼쪽' }, { value: 'center', label: '가운데' }, { value: 'right', label: '오른쪽' }]}
+                  value={textAlign} onChange={setTextAlign}
+                />
+              </div>
+              <div className="ios-separator" />
+              <IOSRow label="날짜 표시" right={<IOSToggle checked={showDate} onChange={setShowDate} />} />
+              <IOSRow label="페이지 번호" right={<IOSToggle checked={showPageNum} onChange={setShowPageNum} />} />
+              <IOSRow label="제목 밑줄" right={<IOSToggle checked={showTitleLine} onChange={setShowTitleLine} />} isLast />
+            </IOSGroupedCard>
+
+            {/* 버튼 */}
+            <div className="space-y-3 px-1">
+              <IOSButton onClick={handlePreview} variant="secondary" disabled={!content.trim() || generating}>
+                {generating ? '생성 중...' : '미리보기'}
+              </IOSButton>
+              <IOSButton onClick={handleGenerate} disabled={!content.trim() || generating}>
+                {generating ? '생성 중...' : 'PDF 다운로드'}
+              </IOSButton>
+            </div>
+
+            <p className="text-center text-ios-gray2 text-[13px] font-ios mt-6 mb-4">
+              jsPDF 기반 · 한글 지원 · 브라우저에서 직접 생성
+            </p>
+          </div>
+
+          {/* 상세 설정 시트 */}
+          <IOSSheet isOpen={showSettings} onClose={() => setShowSettings(false)} title="상세 설정">
+            <IOSGroupedCard title="폰트 크기">
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">본문 크기</span>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={fontSize} onChange={e => setFontSize(e.target.value)}
+                    className="bg-transparent text-[17px] font-ios text-right outline-none w-12" />
+                  <span className="text-[15px] text-ios-gray1 font-ios">pt</span>
+                </div>
+              </div>
+              <div className="ios-separator" />
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">제목 크기</span>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={titleSize} onChange={e => setTitleSize(e.target.value)}
+                    className="bg-transparent text-[17px] font-ios text-right outline-none w-12" />
+                  <span className="text-[15px] text-ios-gray1 font-ios">pt</span>
+                </div>
+              </div>
+            </IOSGroupedCard>
+
+            <IOSGroupedCard title="레이아웃">
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">줄 간격</span>
+                <IOSSegment
+                  options={[
+                    { value: '1.2', label: '좁게' },
+                    { value: '1.6', label: '보통' },
+                    { value: '2.0', label: '넓게' },
+                  ]}
+                  value={lineSpacing} onChange={setLineSpacing}
+                />
+              </div>
+              <div className="ios-separator" />
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">여백</span>
+                <IOSSegment
+                  options={[
+                    { value: '15', label: '좁게' },
+                    { value: '20', label: '보통' },
+                    { value: '30', label: '넓게' },
+                  ]}
+                  value={margin} onChange={setMargin}
+                />
+              </div>
+            </IOSGroupedCard>
+
+            <IOSGroupedCard title="색상">
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">제목 색상</span>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={titleColor} onChange={e => setTitleColor(e.target.value)}
+                    className="w-8 h-8 rounded-lg cursor-pointer border border-ios-gray4" />
+                  <span className="text-[15px] font-mono text-ios-gray1">{titleColor}</span>
+                </div>
+              </div>
+              <div className="ios-separator" />
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">본문 색상</span>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={textColor} onChange={e => setTextColor(e.target.value)}
+                    className="w-8 h-8 rounded-lg cursor-pointer border border-ios-gray4" />
+                  <span className="text-[15px] font-mono text-ios-gray1">{textColor}</span>
+                </div>
+              </div>
+            </IOSGroupedCard>
+
+            <IOSGroupedCard title="프리셋">
+              <button onClick={() => { setFontSize('11'); setTitleSize('20'); setLineSpacing('1.6'); setMargin('20'); setTitleColor('#1a1a2e'); setTextColor('#333333'); }}
+                className="w-full px-4 py-[11px] text-ios-blue text-[17px] font-ios text-left active:bg-ios-gray5">
+                기본 문서
+              </button>
+              <div className="ios-separator" />
+              <button onClick={() => { setFontSize('10'); setTitleSize('16'); setLineSpacing('1.4'); setMargin('25'); setTitleColor('#000000'); setTextColor('#222222'); }}
+                className="w-full px-4 py-[11px] text-ios-blue text-[17px] font-ios text-left active:bg-ios-gray5">
+                리포트 스타일
+              </button>
+              <div className="ios-separator" />
+              <button onClick={() => { setFontSize('13'); setTitleSize('24'); setLineSpacing('2.0'); setMargin('30'); setTitleColor('#2563eb'); setTextColor('#374151'); }}
+                className="w-full px-4 py-[11px] text-ios-blue text-[17px] font-ios text-left active:bg-ios-gray5">
+                에세이 스타일
+              </button>
+              <div className="ios-separator" />
+              <button onClick={() => { setFontSize('9'); setTitleSize('14'); setLineSpacing('1.2'); setMargin('15'); setTitleColor('#1f2937'); setTextColor('#4b5563'); }}
+                className="w-full px-4 py-[11px] text-ios-blue text-[17px] font-ios text-left active:bg-ios-gray5">
+                컴팩트
+              </button>
+            </IOSGroupedCard>
+          </IOSSheet>
+
+          {/* 미리보기 시트 */}
+          <IOSSheet isOpen={showPreview} onClose={() => setShowPreview(false)} title="미리보기">
+            {previewUrl && (
+              <div className="bg-ios-card ios-inset overflow-hidden">
+                <iframe src={previewUrl} className="w-full border-0" style={{ height: '60vh' }} title="PDF 미리보기" />
+              </div>
+            )}
+            <div className="mt-4 px-1">
+              <IOSButton onClick={handleGenerate} disabled={generating}>
+                {generating ? '생성 중...' : 'PDF 다운로드'}
+              </IOSButton>
+            </div>
+          </IOSSheet>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      return <PDFGenerator />;
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
