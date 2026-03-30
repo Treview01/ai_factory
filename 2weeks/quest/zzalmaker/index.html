@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>짤 생성기 — iPhone Style</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
+
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    /* iOS 스타일 토글 */
+    .ios-toggle { width: 51px; height: 31px; border-radius: 15.5px; position: relative; cursor: pointer; transition: background 0.3s; }
+    .ios-toggle .knob { width: 27px; height: 27px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .ios-toggle.on { background: #34C759; }
+    .ios-toggle.on .knob { transform: translateX(20px); }
+    .ios-toggle.off { background: #E5E5EA; }
+
+    /* 캔버스 위 텍스트 드래그 */
+    .drag-text { cursor: grab; user-select: none; touch-action: none; }
+    .drag-text:active { cursor: grabbing; }
+
+    /* iOS 블러 배경 */
+    .ios-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(255,255,255,0.72); }
+    .ios-blur-dark { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(0,0,0,0.55); }
+
+    /* 슬라이더 iOS 스타일 */
+    input[type="range"] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: #E5E5EA; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
+
+    /* 색상 선택 원형 */
+    .color-dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+    .color-dot:hover { transform: scale(1.15); }
+    .color-dot.selected { box-shadow: 0 0 0 3px #007AFF; transform: scale(1.15); }
+
+    /* 스크롤바 숨기기 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* 애니메이션 */
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .slide-up { animation: slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1); }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .fade-in { animation: fadeIn 0.25s ease; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+    // ========================================
+    // 🎨 상수 & 설정
+    // ========================================
+    const PRESET_COLORS = [
+      '#FFFFFF', '#000000', '#FF3B30', '#FF9500', '#FFCC00',
+      '#34C759', '#007AFF', '#5856D6', '#AF52DE', '#FF2D55'
+    ];
+
+    const FONT_OPTIONS = [
+      { name: '고딕', value: "'Noto Sans KR', sans-serif" },
+      { name: '시스템', value: "-apple-system, sans-serif" },
+      { name: '모노', value: "'Courier New', monospace" },
+      { name: '세리프', value: "'Georgia', serif" },
+    ];
+
+    const SAMPLE_IMAGES = [
+      'https://picsum.photos/seed/meme1/800/800',
+      'https://picsum.photos/seed/meme2/800/800',
+      'https://picsum.photos/seed/meme3/800/800',
+      'https://picsum.photos/seed/cat1/800/800',
+      'https://picsum.photos/seed/dog1/800/800',
+      'https://picsum.photos/seed/nature1/800/800',
+    ];
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function IOSButton({ children, variant = 'primary', size = 'md', onClick, disabled, className = '' }) {
+      const base = 'font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100';
+      const variants = {
+        primary: 'bg-[#007AFF] text-white hover:bg-[#0066DD]',
+        secondary: 'bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]',
+        danger: 'bg-[#FF3B30] text-white hover:bg-[#DD2B20]',
+        ghost: 'bg-transparent text-[#007AFF]',
+        dark: 'bg-[#1C1C1E] text-white hover:bg-[#2C2C2E]',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-6 py-3.5 text-lg',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function IOSCard({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-2xl shadow-sm ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function IOSToggle({ on, onChange }) {
+      return (
+        <div className={`ios-toggle ${on ? 'on' : 'off'}`} onClick={() => onChange(!on)}>
+          <div className="knob" />
+        </div>
+      );
+    }
+
+    function IOSSegment({ options, value, onChange }) {
+      return (
+        <div className="bg-[#E5E5EA] rounded-lg p-0.5 flex">
+          {options.map(opt => (
+            <button key={opt.value} onClick={() => onChange(opt.value)}
+              className={`flex-1 py-1.5 px-3 text-sm font-medium rounded-md transition-all
+                ${value === opt.value ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function BottomSheet({ isOpen, onClose, title, children }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 fade-in" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up max-h-[85vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <h3 className="text-lg font-bold">{title}</h3>
+              <button onClick={onClose} className="text-[#007AFF] font-medium">완료</button>
+            </div>
+            <div className="overflow-y-auto max-h-[70vh] no-scrollbar">
+              {children}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 텍스트 레이어 관리
+    // ========================================
+    function createTextLayer(text = '텍스트를 입력하세요') {
+      return {
+        id: Date.now() + Math.random(),
+        text,
+        x: 50, y: 50,
+        fontSize: 32,
+        fontFamily: FONT_OPTIONS[0].value,
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 2,
+        hasStroke: true,
+        bold: true,
+        italic: false,
+        textAlign: 'center',
+        shadow: true,
+        rotation: 0,
+      };
+    }
+
+    // ========================================
+    // 📄 메인 앱
+    // ========================================
+    function App() {
+      // 이미지 상태
+      const [image, setImage] = useState(null);
+      const [imageObj, setImageObj] = useState(null);
+
+      // 텍스트 레이어
+      const [layers, setLayers] = useState([createTextLayer('위 텍스트'), { ...createTextLayer('아래 텍스트'), y: 85 }]);
+      const [activeLayerId, setActiveLayerId] = useState(null);
+
+      // UI 상태
+      const [showTextEditor, setShowTextEditor] = useState(false);
+      const [showStyleEditor, setShowStyleEditor] = useState(false);
+      const [showImagePicker, setShowImagePicker] = useState(false);
+      const [canvasSize, setCanvasSize] = useState({ w: 800, h: 800 });
+      const [outputQuality, setOutputQuality] = useState('high');
+      const [downloading, setDownloading] = useState(false);
+
+      const canvasRef = useRef(null);
+      const previewRef = useRef(null);
+      const fileInputRef = useRef(null);
+      const dragRef = useRef({ dragging: false, layerId: null, startX: 0, startY: 0, origX: 0, origY: 0 });
+
+      const activeLayer = useMemo(() => layers.find(l => l.id === activeLayerId), [layers, activeLayerId]);
+
+      // 이미지 로드
+      const loadImage = useCallback((src) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          setImageObj(img);
+          setImage(src);
+        };
+        img.onerror = () => {
+          alert('이미지를 불러올 수 없습니다.');
+        };
+        img.src = src;
+      }, []);
+
+      // 파일 업로드
+      const handleFileUpload = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => loadImage(ev.target.result);
+        reader.readAsDataURL(file);
+      }, [loadImage]);
+
+      // 레이어 업데이트
+      const updateLayer = useCallback((id, updates) => {
+        setLayers(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+      }, []);
+
+      const removeLayer = useCallback((id) => {
+        setLayers(prev => prev.filter(l => l.id !== id));
+        if (activeLayerId === id) setActiveLayerId(null);
+      }, [activeLayerId]);
+
+      const addLayer = useCallback(() => {
+        const newLayer = createTextLayer('새 텍스트');
+        newLayer.y = 30 + Math.random() * 40;
+        setLayers(prev => [...prev, newLayer]);
+        setActiveLayerId(newLayer.id);
+      }, []);
+
+      // ========================================
+      // 🎨 Canvas 렌더링
+      // ========================================
+      const renderCanvas = useCallback((forDownload = false) => {
+        const canvas = forDownload ? document.createElement('canvas') : canvasRef.current;
+        if (!canvas) return null;
+        const ctx = canvas.getContext('2d');
+        const scale = forDownload && outputQuality === 'high' ? 2 : 1;
+        const w = canvasSize.w * scale;
+        const h = canvasSize.h * scale;
+        canvas.width = w;
+        canvas.height = h;
+
+        // 배경
+        if (imageObj) {
+          const imgRatio = imageObj.width / imageObj.height;
+          const canvasRatio = w / h;
+          let sx = 0, sy = 0, sw = imageObj.width, sh = imageObj.height;
+          if (imgRatio > canvasRatio) {
+            sw = imageObj.height * canvasRatio;
+            sx = (imageObj.width - sw) / 2;
+          } else {
+            sh = imageObj.width / canvasRatio;
+            sy = (imageObj.height - sh) / 2;
+          }
+          ctx.drawImage(imageObj, sx, sy, sw, sh, 0, 0, w, h);
+        } else {
+          ctx.fillStyle = '#1C1C1E';
+          ctx.fillRect(0, 0, w, h);
+          if (!forDownload) {
+            ctx.fillStyle = '#86868B';
+            ctx.font = `${16 * scale}px -apple-system, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText('이미지를 선택하세요', w / 2, h / 2);
+          }
+        }
+
+        // 텍스트 레이어 렌더링
+        layers.forEach(layer => {
+          const x = (layer.x / 100) * w;
+          const y = (layer.y / 100) * h;
+          const fontSize = layer.fontSize * scale;
+
+          ctx.save();
+          ctx.translate(x, y);
+          if (layer.rotation) ctx.rotate((layer.rotation * Math.PI) / 180);
+
+          const fontStyle = `${layer.italic ? 'italic ' : ''}${layer.bold ? '900' : '400'} ${fontSize}px ${layer.fontFamily}`;
+          ctx.font = fontStyle;
+          ctx.textAlign = layer.textAlign;
+          ctx.textBaseline = 'middle';
+
+          const lines = layer.text.split('\n');
+          const lineHeight = fontSize * 1.3;
+          const totalHeight = lines.length * lineHeight;
+          const startY = -totalHeight / 2 + lineHeight / 2;
+
+          lines.forEach((line, i) => {
+            const ly = startY + i * lineHeight;
+
+            // 그림자
+            if (layer.shadow) {
+              ctx.shadowColor = 'rgba(0,0,0,0.5)';
+              ctx.shadowBlur = 8 * scale;
+              ctx.shadowOffsetX = 2 * scale;
+              ctx.shadowOffsetY = 2 * scale;
+            }
+
+            // 외곽선
+            if (layer.hasStroke && layer.strokeWidth > 0) {
+              ctx.strokeStyle = layer.strokeColor;
+              ctx.lineWidth = layer.strokeWidth * scale * 2;
+              ctx.lineJoin = 'round';
+              ctx.miterLimit = 2;
+              ctx.strokeText(line, 0, ly);
+            }
+
+            // 텍스트
+            ctx.shadowColor = 'transparent';
+            ctx.fillStyle = layer.color;
+            ctx.fillText(line, 0, ly);
+          });
+
+          ctx.restore();
+
+          // 선택 표시 (미리보기에서만)
+          if (!forDownload && layer.id === activeLayerId) {
+            ctx.save();
+            ctx.strokeStyle = '#007AFF';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            const metrics = lines.map(line => {
+              ctx.font = `${layer.bold ? '900' : '400'} ${fontSize}px ${layer.fontFamily}`;
+              return ctx.measureText(line).width;
+            });
+            const maxW = Math.max(...metrics) + 20;
+            const boxH = totalHeight + 20;
+            const bx = layer.textAlign === 'center' ? x - maxW / 2 : layer.textAlign === 'right' ? x - maxW : x;
+            ctx.strokeRect(bx - 5, y - boxH / 2, maxW + 10, boxH);
+            ctx.restore();
+          }
+        });
+
+        return canvas;
+      }, [imageObj, layers, canvasSize, activeLayerId, outputQuality]);
+
+      // 프리뷰 업데이트
+      useEffect(() => {
+        renderCanvas(false);
+      }, [renderCanvas]);
+
+      // 다운로드
+      const handleDownload = useCallback(() => {
+        setDownloading(true);
+        setTimeout(() => {
+          const canvas = renderCanvas(true);
+          if (canvas) {
+            const link = document.createElement('a');
+            link.download = `짤_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+          }
+          setDownloading(false);
+        }, 100);
+      }, [renderCanvas]);
+
+      // ========================================
+      // 🖱️ 드래그 핸들링
+      // ========================================
+      const getCanvasCoords = useCallback((clientX, clientY) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { px: 0, py: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const px = ((clientX - rect.left) / rect.width) * 100;
+        const py = ((clientY - rect.top) / rect.height) * 100;
+        return { px, py };
+      }, []);
+
+      const hitTest = useCallback((px, py) => {
+        for (let i = layers.length - 1; i >= 0; i--) {
+          const l = layers[i];
+          const dx = Math.abs(px - l.x);
+          const dy = Math.abs(py - l.y);
+          if (dx < 20 && dy < 10) return l.id;
+        }
+        return null;
+      }, [layers]);
+
+      const handlePointerDown = useCallback((e) => {
+        const { px, py } = getCanvasCoords(e.clientX, e.clientY);
+        const hitId = hitTest(px, py);
+        if (hitId) {
+          const layer = layers.find(l => l.id === hitId);
+          dragRef.current = { dragging: true, layerId: hitId, startX: px, startY: py, origX: layer.x, origY: layer.y };
+          setActiveLayerId(hitId);
+          e.preventDefault();
+        } else {
+          setActiveLayerId(null);
+        }
+      }, [getCanvasCoords, hitTest, layers]);
+
+      const handlePointerMove = useCallback((e) => {
+        const d = dragRef.current;
+        if (!d.dragging) return;
+        const { px, py } = getCanvasCoords(e.clientX, e.clientY);
+        const newX = Math.max(0, Math.min(100, d.origX + (px - d.startX)));
+        const newY = Math.max(0, Math.min(100, d.origY + (py - d.startY)));
+        updateLayer(d.layerId, { x: newX, y: newY });
+      }, [getCanvasCoords, updateLayer]);
+
+      const handlePointerUp = useCallback(() => {
+        dragRef.current.dragging = false;
+      }, []);
+
+      // ========================================
+      // 📱 렌더
+      // ========================================
+      return (
+        <div className="min-h-screen bg-[#F2F2F7] pb-8">
+          {/* 헤더 */}
+          <div className="ios-blur sticky top-0 z-40 border-b border-gray-200/50">
+            <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+              <h1 className="text-xl font-bold">짤 생성기</h1>
+              <div className="flex gap-2">
+                <IOSButton variant="ghost" size="sm" onClick={() => setShowImagePicker(true)}>
+                  🖼️
+                </IOSButton>
+                <IOSButton variant="primary" size="sm" onClick={handleDownload} disabled={downloading}>
+                  {downloading ? '⏳' : '💾 저장'}
+                </IOSButton>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-lg mx-auto px-4 mt-4 space-y-4">
+            {/* 캔버스 프리뷰 */}
+            <IOSCard className="overflow-hidden">
+              <div ref={previewRef} className="relative"
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}>
+                <canvas ref={canvasRef}
+                  width={canvasSize.w} height={canvasSize.h}
+                  className="w-full h-auto block" />
+              </div>
+            </IOSCard>
+
+            {/* 이미지 선택 */}
+            {!image && (
+              <IOSCard className="p-5">
+                <p className="text-center text-gray-500 text-sm mb-3">이미지를 선택해서 시작하세요</p>
+                <div className="flex gap-2">
+                  <IOSButton variant="primary" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+                    📁 파일 선택
+                  </IOSButton>
+                  <IOSButton variant="secondary" className="flex-1" onClick={() => setShowImagePicker(true)}>
+                    🎲 샘플 이미지
+                  </IOSButton>
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              </IOSCard>
+            )}
+
+            {/* 텍스트 레이어 목록 */}
+            <IOSCard className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bold text-base">텍스트 레이어</h2>
+                <IOSButton variant="ghost" size="sm" onClick={addLayer}>+ 추가</IOSButton>
+              </div>
+              <div className="space-y-2">
+                {layers.map((layer, idx) => (
+                  <div key={layer.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer
+                      ${activeLayerId === layer.id ? 'bg-[#007AFF]/10 ring-1 ring-[#007AFF]' : 'bg-gray-50 hover:bg-gray-100'}`}
+                    onClick={() => setActiveLayerId(layer.id)}>
+                    <span className="text-xs font-mono text-gray-400 w-5">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{layer.text || '(빈 텍스트)'}</p>
+                      <p className="text-xs text-gray-400">{layer.fontSize}px · {layer.color}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-sm hover:bg-gray-50"
+                        onClick={(e) => { e.stopPropagation(); setActiveLayerId(layer.id); setShowTextEditor(true); }}>
+                        ✏️
+                      </button>
+                      <button className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-sm hover:bg-red-50"
+                        onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}>
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {layers.length === 0 && (
+                  <p className="text-center text-gray-400 text-sm py-4">텍스트를 추가해보세요</p>
+                )}
+              </div>
+            </IOSCard>
+
+            {/* 활성 레이어 빠른 편집 */}
+            {activeLayer && (
+              <IOSCard className="p-4 fade-in">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-bold text-base">스타일 편집</h2>
+                  <IOSButton variant="ghost" size="sm" onClick={() => setShowStyleEditor(true)}>
+                    상세 설정
+                  </IOSButton>
+                </div>
+
+                {/* 텍스트 입력 */}
+                <textarea
+                  value={activeLayer.text}
+                  onChange={(e) => updateLayer(activeLayer.id, { text: e.target.value })}
+                  placeholder="텍스트를 입력하세요"
+                  rows={2}
+                  className="w-full p-3 bg-gray-50 rounded-xl border-0 text-base resize-none focus:outline-none focus:ring-2 focus:ring-[#007AFF] mb-3"
+                />
+
+                {/* 글씨 크기 */}
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm text-gray-500 w-8">크기</span>
+                  <input type="range" min="12" max="120" value={activeLayer.fontSize}
+                    onChange={(e) => updateLayer(activeLayer.id, { fontSize: parseInt(e.target.value) })}
+                    className="flex-1" />
+                  <span className="text-sm font-mono w-10 text-right">{activeLayer.fontSize}</span>
+                </div>
+
+                {/* 색상 */}
+                <div className="flex items-center gap-2 mb-3 overflow-x-auto no-scrollbar">
+                  <span className="text-sm text-gray-500 shrink-0">색상</span>
+                  {PRESET_COLORS.map(color => (
+                    <div key={color}
+                      className={`color-dot shrink-0 ${activeLayer.color === color ? 'selected' : ''}`}
+                      style={{ backgroundColor: color, border: color === '#FFFFFF' ? '1px solid #E5E5EA' : 'none' }}
+                      onClick={() => updateLayer(activeLayer.id, { color })} />
+                  ))}
+                </div>
+
+                {/* 볼드/이탤릭/외곽선/그림자 */}
+                <div className="flex gap-2">
+                  <button className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
+                    ${activeLayer.bold ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => updateLayer(activeLayer.id, { bold: !activeLayer.bold })}>
+                    B
+                  </button>
+                  <button className={`flex-1 py-2 rounded-xl text-sm italic transition-all
+                    ${activeLayer.italic ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => updateLayer(activeLayer.id, { italic: !activeLayer.italic })}>
+                    I
+                  </button>
+                  <button className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
+                    ${activeLayer.hasStroke ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => updateLayer(activeLayer.id, { hasStroke: !activeLayer.hasStroke })}>
+                    외곽선
+                  </button>
+                  <button className={`flex-1 py-2 rounded-xl text-sm transition-all
+                    ${activeLayer.shadow ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-600'}`}
+                    onClick={() => updateLayer(activeLayer.id, { shadow: !activeLayer.shadow })}>
+                    그림자
+                  </button>
+                </div>
+              </IOSCard>
+            )}
+
+            {/* 캔버스 비율 */}
+            <IOSCard className="p-4">
+              <h2 className="font-bold text-base mb-3">캔버스 비율</h2>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '1:1', w: 800, h: 800 },
+                  { label: '4:3', w: 800, h: 600 },
+                  { label: '16:9', w: 960, h: 540 },
+                  { label: '9:16', w: 540, h: 960 },
+                ].map(opt => (
+                  <button key={opt.label}
+                    className={`py-2.5 rounded-xl text-sm font-medium transition-all
+                      ${canvasSize.w === opt.w && canvasSize.h === opt.h ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    onClick={() => setCanvasSize({ w: opt.w, h: opt.h })}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </IOSCard>
+
+            {/* 이미지 변경 */}
+            {image && (
+              <div className="flex gap-2">
+                <IOSButton variant="secondary" className="flex-1" onClick={() => fileInputRef.current?.click()}>
+                  📁 이미지 변경
+                </IOSButton>
+                <IOSButton variant="secondary" className="flex-1" onClick={() => setShowImagePicker(true)}>
+                  🎲 샘플 이미지
+                </IOSButton>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              </div>
+            )}
+          </div>
+
+          {/* ========================================
+              텍스트 편집 BottomSheet
+              ======================================== */}
+          <BottomSheet isOpen={showTextEditor} onClose={() => setShowTextEditor(false)} title="텍스트 편집">
+            {activeLayer && (
+              <div className="p-5 space-y-4">
+                <textarea
+                  value={activeLayer.text}
+                  onChange={(e) => updateLayer(activeLayer.id, { text: e.target.value })}
+                  rows={4}
+                  placeholder="여러 줄 입력 가능"
+                  className="w-full p-4 bg-gray-50 rounded-2xl text-base resize-none focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  autoFocus
+                />
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">정렬</p>
+                  <IOSSegment
+                    options={[
+                      { label: '왼쪽', value: 'left' },
+                      { label: '가운데', value: 'center' },
+                      { label: '오른쪽', value: 'right' },
+                    ]}
+                    value={activeLayer.textAlign}
+                    onChange={(v) => updateLayer(activeLayer.id, { textAlign: v })}
+                  />
+                </div>
+              </div>
+            )}
+          </BottomSheet>
+
+          {/* ========================================
+              상세 스타일 BottomSheet
+              ======================================== */}
+          <BottomSheet isOpen={showStyleEditor} onClose={() => setShowStyleEditor(false)} title="상세 스타일">
+            {activeLayer && (
+              <div className="p-5 space-y-5">
+                {/* 폰트 */}
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">폰트</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FONT_OPTIONS.map(f => (
+                      <button key={f.value}
+                        className={`py-2.5 px-3 rounded-xl text-sm transition-all
+                          ${activeLayer.fontFamily === f.value ? 'bg-[#007AFF] text-white' : 'bg-gray-100 text-gray-700'}`}
+                        style={{ fontFamily: f.value }}
+                        onClick={() => updateLayer(activeLayer.id, { fontFamily: f.value })}>
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 외곽선 색상 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-gray-500">외곽선</p>
+                    <IOSToggle on={activeLayer.hasStroke} onChange={(v) => updateLayer(activeLayer.id, { hasStroke: v })} />
+                  </div>
+                  {activeLayer.hasStroke && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2 overflow-x-auto no-scrollbar">
+                        {PRESET_COLORS.map(color => (
+                          <div key={color}
+                            className={`color-dot shrink-0 ${activeLayer.strokeColor === color ? 'selected' : ''}`}
+                            style={{ backgroundColor: color, border: color === '#FFFFFF' ? '1px solid #E5E5EA' : 'none' }}
+                            onClick={() => updateLayer(activeLayer.id, { strokeColor: color })} />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400">두께</span>
+                        <input type="range" min="0" max="10" value={activeLayer.strokeWidth}
+                          onChange={(e) => updateLayer(activeLayer.id, { strokeWidth: parseInt(e.target.value) })}
+                          className="flex-1" />
+                        <span className="text-xs font-mono w-6 text-right">{activeLayer.strokeWidth}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* 회전 */}
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">회전</p>
+                  <div className="flex items-center gap-3">
+                    <input type="range" min="-180" max="180" value={activeLayer.rotation}
+                      onChange={(e) => updateLayer(activeLayer.id, { rotation: parseInt(e.target.value) })}
+                      className="flex-1" />
+                    <span className="text-sm font-mono w-10 text-right">{activeLayer.rotation}°</span>
+                    <button className="text-xs text-[#007AFF]" onClick={() => updateLayer(activeLayer.id, { rotation: 0 })}>
+                      리셋
+                    </button>
+                  </div>
+                </div>
+
+                {/* 위치 미세 조정 */}
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">위치 미세 조정</p>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-xs text-gray-400 w-4">X</span>
+                    <input type="range" min="0" max="100" value={Math.round(activeLayer.x)}
+                      onChange={(e) => updateLayer(activeLayer.id, { x: parseInt(e.target.value) })}
+                      className="flex-1" />
+                    <span className="text-xs font-mono w-8 text-right">{Math.round(activeLayer.x)}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 w-4">Y</span>
+                    <input type="range" min="0" max="100" value={Math.round(activeLayer.y)}
+                      onChange={(e) => updateLayer(activeLayer.id, { y: parseInt(e.target.value) })}
+                      className="flex-1" />
+                    <span className="text-xs font-mono w-8 text-right">{Math.round(activeLayer.y)}%</span>
+                  </div>
+                </div>
+
+                {/* 출력 품질 */}
+                <div>
+                  <p className="text-sm text-gray-500 mb-2">출력 품질</p>
+                  <IOSSegment
+                    options={[
+                      { label: '일반', value: 'normal' },
+                      { label: '고화질 (2x)', value: 'high' },
+                    ]}
+                    value={outputQuality}
+                    onChange={setOutputQuality}
+                  />
+                </div>
+              </div>
+            )}
+          </BottomSheet>
+
+          {/* ========================================
+              이미지 선택 BottomSheet
+              ======================================== */}
+          <BottomSheet isOpen={showImagePicker} onClose={() => setShowImagePicker(false)} title="이미지 선택">
+            <div className="p-5 space-y-4">
+              <IOSButton variant="primary" className="w-full" onClick={() => { fileInputRef.current?.click(); setShowImagePicker(false); }}>
+                📁 내 기기에서 선택
+              </IOSButton>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { handleFileUpload(e); setShowImagePicker(false); }} />
+
+              {/* URL 입력 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">이미지 URL</p>
+                <div className="flex gap-2">
+                  <input id="url-input" type="text" placeholder="https://..."
+                    className="flex-1 p-3 bg-gray-50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        loadImage(e.target.value);
+                        setShowImagePicker(false);
+                      }
+                    }} />
+                  <IOSButton variant="secondary" size="sm" onClick={() => {
+                    const url = document.getElementById('url-input').value;
+                    if (url) { loadImage(url); setShowImagePicker(false); }
+                  }}>
+                    확인
+                  </IOSButton>
+                </div>
+              </div>
+
+              {/* 샘플 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">샘플 이미지</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {SAMPLE_IMAGES.map((src, i) => (
+                    <img key={i} src={src} alt={`샘플 ${i + 1}`}
+                      className="w-full aspect-square object-cover rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => { loadImage(src); setShowImagePicker(false); }} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </BottomSheet>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 렌더링
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
