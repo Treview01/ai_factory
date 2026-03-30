@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR 코드 생성기 — iPhone Style</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&display=swap');
+
+    * { -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    .ios-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(255,255,255,0.72); }
+
+    input[type="range"] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: #E5E5EA; outline: none; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: white; box-shadow: 0 1px 4px rgba(0,0,0,0.3); cursor: pointer; }
+
+    .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; flex-shrink: 0; }
+    .color-dot:hover { transform: scale(1.15); }
+    .color-dot.selected { box-shadow: 0 0 0 3px #007AFF; transform: scale(1.15); }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .slide-up { animation: slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1); }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .fade-in { animation: fadeIn 0.25s ease; }
+
+    @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .scale-in { animation: scaleIn 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+
+    .qr-glow { filter: drop-shadow(0 4px 20px rgba(0,122,255,0.15)); }
+
+    /* 토스트 */
+    @keyframes toastIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+    .toast-in { animation: toastIn 0.3s ease; }
+    .toast-out { animation: toastOut 0.3s ease forwards; }
+  </style>
+</head>
+<body class="bg-[#F2F2F7]">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useRef, useEffect, useCallback, useMemo } = React;
+
+    // ========================================
+    // 🎨 상수 & 설정
+    // ========================================
+    const QR_COLORS = [
+      '#000000', '#1C1C1E', '#3A3A3C', '#007AFF', '#5856D6',
+      '#AF52DE', '#FF2D55', '#FF3B30', '#FF9500', '#34C759'
+    ];
+
+    const BG_COLORS = [
+      '#FFFFFF', '#F2F2F7', '#FFF9E6', '#FFF0F0', '#F0F4FF',
+      '#F0FFF4', '#FDF2F8', '#FFFBEB', '#F5F3FF', '#000000'
+    ];
+
+    const PRESET_TYPES = [
+      { id: 'text', icon: '📝', label: '텍스트', placeholder: '텍스트를 입력하세요' },
+      { id: 'url', icon: '🔗', label: 'URL', placeholder: 'https://example.com' },
+      { id: 'wifi', icon: '📶', label: 'Wi-Fi', placeholder: '' },
+      { id: 'email', icon: '📧', label: '이메일', placeholder: 'hello@example.com' },
+      { id: 'phone', icon: '📞', label: '전화', placeholder: '010-1234-5678' },
+      { id: 'sms', icon: '💬', label: 'SMS', placeholder: '010-1234-5678' },
+    ];
+
+    const CORNER_STYLES = [
+      { id: 'square', label: '각진' },
+      { id: 'round', label: '둥근' },
+      { id: 'extra-round', label: '많이 둥근' },
+    ];
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function IOSButton({ children, variant = 'primary', size = 'md', onClick, disabled, className = '' }) {
+      const base = 'font-semibold rounded-2xl transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100';
+      const variants = {
+        primary: 'bg-[#007AFF] text-white hover:bg-[#0066DD]',
+        secondary: 'bg-[#E5E5EA] text-black hover:bg-[#D1D1D6]',
+        danger: 'bg-[#FF3B30] text-white hover:bg-[#DD2B20]',
+        ghost: 'bg-transparent text-[#007AFF]',
+        dark: 'bg-[#1C1C1E] text-white hover:bg-[#2C2C2E]',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-6 py-3.5 text-lg w-full',
+      };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function IOSCard({ children, className = '' }) {
+      return <div className={`bg-white rounded-2xl shadow-sm ${className}`}>{children}</div>;
+    }
+
+    function IOSSegment({ options, value, onChange }) {
+      return (
+        <div className="bg-[#E5E5EA] rounded-xl p-0.5 flex">
+          {options.map(opt => (
+            <button key={opt.value} onClick={() => onChange(opt.value)}
+              className={`flex-1 py-2 px-3 text-sm font-medium rounded-[10px] transition-all
+                ${value === opt.value ? 'bg-white shadow-sm text-black' : 'text-gray-500'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function IOSToggle({ on, onChange }) {
+      return (
+        <div className={`w-[51px] h-[31px] rounded-full relative cursor-pointer transition-colors duration-300 ${on ? 'bg-[#34C759]' : 'bg-[#E5E5EA]'}`}
+          onClick={() => onChange(!on)}>
+          <div className={`w-[27px] h-[27px] rounded-full bg-white absolute top-[2px] transition-transform duration-300 shadow-md
+            ${on ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+        </div>
+      );
+    }
+
+    function BottomSheet({ isOpen, onClose, title, children }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 fade-in" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl slide-up max-h-[85vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <h3 className="text-lg font-bold">{title}</h3>
+              <button onClick={onClose} className="text-[#007AFF] font-semibold">완료</button>
+            </div>
+            <div className="overflow-y-auto max-h-[70vh] no-scrollbar pb-8">
+              {children}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function Toast({ message, visible, leaving }) {
+      if (!visible) return null;
+      return (
+        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 bg-[#1C1C1E] text-white rounded-2xl shadow-xl text-sm font-medium ${leaving ? 'toast-out' : 'toast-in'}`}>
+          {message}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔧 QR 코드 생성 유틸
+    // ========================================
+    function generateQRData(type, fields) {
+      switch (type) {
+        case 'url':
+          return fields.url || '';
+        case 'wifi':
+          return `WIFI:T:${fields.wifiAuth || 'WPA'};S:${fields.wifiName || ''};P:${fields.wifiPass || ''};H:${fields.wifiHidden ? 'true' : 'false'};;`;
+        case 'email':
+          return `mailto:${fields.email || ''}?subject=${encodeURIComponent(fields.emailSubject || '')}&body=${encodeURIComponent(fields.emailBody || '')}`;
+        case 'phone':
+          return `tel:${fields.phone || ''}`;
+        case 'sms':
+          return `sms:${fields.smsNumber || ''}${fields.smsBody ? `?body=${encodeURIComponent(fields.smsBody)}` : ''}`;
+        default:
+          return fields.text || '';
+      }
+    }
+
+    function renderQRToCanvas(canvas, data, options = {}) {
+      if (!canvas || !data) return;
+
+      const {
+        size = 280,
+        fgColor = '#000000',
+        bgColor = '#FFFFFF',
+        cornerStyle = 'square',
+        errorCorrection = 'M',
+        margin = 4,
+        logoImage = null,
+      } = options;
+
+      const typeNumber = 0;
+      const errorCorrectionLevel = errorCorrection;
+      const qr = qrcode(typeNumber, errorCorrectionLevel);
+      try {
+        qr.addData(data);
+        qr.make();
+      } catch (e) {
+        return;
+      }
+
+      const moduleCount = qr.getModuleCount();
+      const cellSize = (size - margin * 2) / moduleCount;
+      const scale = 2;
+
+      canvas.width = size * scale;
+      canvas.height = size * scale;
+      canvas.style.width = size + 'px';
+      canvas.style.height = size + 'px';
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+
+      // 배경
+      const bgRadius = cornerStyle === 'square' ? 0 : cornerStyle === 'round' ? 16 : 24;
+      ctx.fillStyle = bgColor;
+      if (bgRadius > 0) {
+        roundRect(ctx, 0, 0, size, size, bgRadius);
+        ctx.fill();
+      } else {
+        ctx.fillRect(0, 0, size, size);
+      }
+
+      // QR 모듈 그리기
+      const dotRadius = cornerStyle === 'square' ? 0 : cornerStyle === 'round' ? cellSize * 0.25 : cellSize * 0.45;
+
+      ctx.fillStyle = fgColor;
+      for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+          if (qr.isDark(row, col)) {
+            const x = margin + col * cellSize;
+            const y = margin + row * cellSize;
+            if (dotRadius > 0) {
+              roundRect(ctx, x, y, cellSize, cellSize, dotRadius);
+              ctx.fill();
+            } else {
+              ctx.fillRect(x, y, cellSize, cellSize);
+            }
+          }
+        }
+      }
+
+      // 로고
+      if (logoImage) {
+        const logoSize = size * 0.22;
+        const logoX = (size - logoSize) / 2;
+        const logoY = (size - logoSize) / 2;
+        const logoPad = 6;
+
+        ctx.fillStyle = bgColor;
+        roundRect(ctx, logoX - logoPad, logoY - logoPad, logoSize + logoPad * 2, logoSize + logoPad * 2, 12);
+        ctx.fill();
+
+        ctx.save();
+        roundRect(ctx, logoX, logoY, logoSize, logoSize, 8);
+        ctx.clip();
+        ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize);
+        ctx.restore();
+      }
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // ========================================
+    // 📄 메인 앱
+    // ========================================
+    function App() {
+      const [activeType, setActiveType] = useState('text');
+      const [fields, setFields] = useState({ text: 'Hello, QR!' });
+      const [fgColor, setFgColor] = useState('#000000');
+      const [bgColor, setBgColor] = useState('#FFFFFF');
+      const [cornerStyle, setCornerStyle] = useState('round');
+      const [errorCorrection, setErrorCorrection] = useState('M');
+      const [qrSize, setQrSize] = useState(280);
+      const [showStyleSheet, setShowStyleSheet] = useState(false);
+      const [showLogoSheet, setShowLogoSheet] = useState(false);
+      const [logoImg, setLogoImg] = useState(null);
+      const [hasLogo, setHasLogo] = useState(false);
+      const [toast, setToast] = useState({ visible: false, message: '', leaving: false });
+
+      const canvasRef = useRef(null);
+      const downloadCanvasRef = useRef(null);
+      const logoInputRef = useRef(null);
+
+      const updateField = useCallback((key, val) => {
+        setFields(prev => ({ ...prev, [key]: val }));
+      }, []);
+
+      const qrData = useMemo(() => generateQRData(activeType, fields), [activeType, fields]);
+
+      // QR 렌더
+      useEffect(() => {
+        if (!qrData.trim()) return;
+        renderQRToCanvas(canvasRef.current, qrData, {
+          size: qrSize,
+          fgColor,
+          bgColor,
+          cornerStyle,
+          errorCorrection,
+          logoImage: hasLogo ? logoImg : null,
+        });
+      }, [qrData, fgColor, bgColor, cornerStyle, errorCorrection, qrSize, logoImg, hasLogo]);
+
+      // 토스트
+      const showToast = useCallback((message) => {
+        setToast({ visible: true, message, leaving: false });
+        setTimeout(() => setToast(prev => ({ ...prev, leaving: true })), 1500);
+        setTimeout(() => setToast({ visible: false, message: '', leaving: false }), 1800);
+      }, []);
+
+      // 다운로드
+      const handleDownload = useCallback((format) => {
+        const dlCanvas = document.createElement('canvas');
+        const dlSize = 1024;
+        renderQRToCanvas(dlCanvas, qrData, {
+          size: dlSize,
+          fgColor,
+          bgColor,
+          cornerStyle,
+          errorCorrection,
+          logoImage: hasLogo ? logoImg : null,
+        });
+        // canvas scale 보정
+        dlCanvas.style.width = '';
+        dlCanvas.style.height = '';
+
+        const link = document.createElement('a');
+        if (format === 'svg') {
+          // SVG는 Canvas에서 변환 불가하므로 PNG로 대체
+          link.download = `qrcode_${Date.now()}.png`;
+          link.href = dlCanvas.toDataURL('image/png');
+        } else if (format === 'jpg') {
+          link.download = `qrcode_${Date.now()}.jpg`;
+          link.href = dlCanvas.toDataURL('image/jpeg', 0.95);
+        } else {
+          link.download = `qrcode_${Date.now()}.png`;
+          link.href = dlCanvas.toDataURL('image/png');
+        }
+        link.click();
+        showToast('✅ 다운로드 완료!');
+      }, [qrData, fgColor, bgColor, cornerStyle, errorCorrection, logoImg, hasLogo, showToast]);
+
+      // 클립보드 복사
+      const handleCopy = useCallback(async () => {
+        const dlCanvas = document.createElement('canvas');
+        renderQRToCanvas(dlCanvas, qrData, {
+          size: 512,
+          fgColor,
+          bgColor,
+          cornerStyle,
+          errorCorrection,
+          logoImage: hasLogo ? logoImg : null,
+        });
+        try {
+          const blob = await new Promise(resolve => dlCanvas.toBlob(resolve, 'image/png'));
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          showToast('📋 클립보드에 복사됨!');
+        } catch {
+          showToast('❌ 복사 실패');
+        }
+      }, [qrData, fgColor, bgColor, cornerStyle, errorCorrection, logoImg, hasLogo, showToast]);
+
+      // 로고 업로드
+      const handleLogoUpload = useCallback((e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => { setLogoImg(img); setHasLogo(true); };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      }, []);
+
+      // ========================================
+      // 📱 렌더
+      // ========================================
+      return (
+        <div className="min-h-screen bg-[#F2F2F7] pb-10">
+          <Toast {...toast} />
+
+          {/* 헤더 */}
+          <div className="ios-blur sticky top-0 z-40 border-b border-gray-200/50">
+            <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+              <h1 className="text-xl font-bold tracking-tight">QR 코드 생성기</h1>
+              <IOSButton variant="ghost" size="sm" onClick={() => setShowStyleSheet(true)}>
+                🎨 스타일
+              </IOSButton>
+            </div>
+          </div>
+
+          <div className="max-w-lg mx-auto px-4 mt-4 space-y-4">
+
+            {/* 입력 유형 선택 */}
+            <IOSCard className="p-4">
+              <div className="grid grid-cols-6 gap-1.5">
+                {PRESET_TYPES.map(t => (
+                  <button key={t.id}
+                    onClick={() => setActiveType(t.id)}
+                    className={`flex flex-col items-center gap-1 py-2.5 rounded-2xl transition-all text-center
+                      ${activeType === t.id ? 'bg-[#007AFF] text-white shadow-md shadow-blue-200' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
+                    <span className="text-lg">{t.icon}</span>
+                    <span className="text-[11px] font-medium leading-tight">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </IOSCard>
+
+            {/* 입력 필드 */}
+            <IOSCard className="p-5">
+              <InputFields type={activeType} fields={fields} updateField={updateField} />
+            </IOSCard>
+
+            {/* QR 코드 프리뷰 */}
+            <IOSCard className="p-6 flex flex-col items-center">
+              <div className="qr-glow scale-in mb-4">
+                <canvas ref={canvasRef} />
+              </div>
+              {!qrData.trim() && (
+                <p className="text-gray-400 text-sm">내용을 입력하면 QR 코드가 생성됩니다</p>
+              )}
+
+              {/* 액션 버튼 */}
+              <div className="flex gap-2 w-full mt-2">
+                <IOSButton variant="primary" size="lg" onClick={() => handleDownload('png')}>
+                  💾 PNG 저장
+                </IOSButton>
+              </div>
+              <div className="flex gap-2 w-full mt-2">
+                <IOSButton variant="secondary" size="md" className="flex-1" onClick={() => handleDownload('jpg')}>
+                  JPG
+                </IOSButton>
+                <IOSButton variant="secondary" size="md" className="flex-1" onClick={handleCopy}>
+                  📋 복사
+                </IOSButton>
+                <IOSButton variant="secondary" size="md" className="flex-1" onClick={() => setShowLogoSheet(true)}>
+                  🏷️ 로고
+                </IOSButton>
+              </div>
+            </IOSCard>
+
+            {/* 빠른 색상 */}
+            <IOSCard className="p-4">
+              <h3 className="font-bold text-sm mb-3">빠른 색상 변경</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">QR 코드 색상</p>
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    {QR_COLORS.map(c => (
+                      <div key={c}
+                        className={`color-dot ${fgColor === c ? 'selected' : ''}`}
+                        style={{ backgroundColor: c, border: c === '#FFFFFF' ? '1px solid #ddd' : 'none' }}
+                        onClick={() => setFgColor(c)} />
+                    ))}
+                    <label className="color-dot flex items-center justify-center bg-gradient-to-br from-red-400 via-yellow-400 to-blue-400 cursor-pointer text-white text-xs font-bold">
+                      +
+                      <input type="color" className="sr-only" value={fgColor} onChange={e => setFgColor(e.target.value)} />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">배경 색상</p>
+                  <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                    {BG_COLORS.map(c => (
+                      <div key={c}
+                        className={`color-dot ${bgColor === c ? 'selected' : ''}`}
+                        style={{ backgroundColor: c, border: ['#FFFFFF','#F2F2F7'].includes(c) ? '1px solid #ddd' : 'none' }}
+                        onClick={() => setBgColor(c)} />
+                    ))}
+                    <label className="color-dot flex items-center justify-center bg-gradient-to-br from-pink-400 via-green-400 to-purple-400 cursor-pointer text-white text-xs font-bold">
+                      +
+                      <input type="color" className="sr-only" value={bgColor} onChange={e => setBgColor(e.target.value)} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </IOSCard>
+
+            {/* 모서리 스타일 */}
+            <IOSCard className="p-4">
+              <h3 className="font-bold text-sm mb-3">모서리 스타일</h3>
+              <IOSSegment
+                options={CORNER_STYLES.map(s => ({ value: s.id, label: s.label }))}
+                value={cornerStyle}
+                onChange={setCornerStyle}
+              />
+            </IOSCard>
+          </div>
+
+          {/* ========================================
+              🎨 스타일 상세 BottomSheet
+              ======================================== */}
+          <BottomSheet isOpen={showStyleSheet} onClose={() => setShowStyleSheet(false)} title="스타일 상세 설정">
+            <div className="p-5 space-y-5">
+              {/* QR 크기 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">QR 코드 크기</p>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="160" max="400" value={qrSize}
+                    onChange={e => setQrSize(parseInt(e.target.value))}
+                    className="flex-1" />
+                  <span className="text-sm font-mono w-14 text-right">{qrSize}px</span>
+                </div>
+              </div>
+
+              {/* 오류 보정 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">오류 보정 수준</p>
+                <IOSSegment
+                  options={[
+                    { value: 'L', label: 'L (7%)' },
+                    { value: 'M', label: 'M (15%)' },
+                    { value: 'Q', label: 'Q (25%)' },
+                    { value: 'H', label: 'H (30%)' },
+                  ]}
+                  value={errorCorrection}
+                  onChange={setErrorCorrection}
+                />
+                <p className="text-xs text-gray-400 mt-2">로고를 넣을 경우 H(30%)를 권장합니다</p>
+              </div>
+
+              {/* 모서리 스타일 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">모서리 스타일</p>
+                <IOSSegment
+                  options={CORNER_STYLES.map(s => ({ value: s.id, label: s.label }))}
+                  value={cornerStyle}
+                  onChange={setCornerStyle}
+                />
+              </div>
+
+              {/* 색상 커스텀 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">커스텀 색상</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-3 flex-1 bg-gray-50 rounded-xl p-3 cursor-pointer">
+                    <div className="w-8 h-8 rounded-lg border border-gray-200" style={{ backgroundColor: fgColor }} />
+                    <div>
+                      <p className="text-xs text-gray-400">QR 색상</p>
+                      <p className="text-sm font-mono">{fgColor}</p>
+                    </div>
+                    <input type="color" className="sr-only" value={fgColor} onChange={e => setFgColor(e.target.value)} />
+                  </label>
+                  <label className="flex items-center gap-3 flex-1 bg-gray-50 rounded-xl p-3 cursor-pointer">
+                    <div className="w-8 h-8 rounded-lg border border-gray-200" style={{ backgroundColor: bgColor }} />
+                    <div>
+                      <p className="text-xs text-gray-400">배경 색상</p>
+                      <p className="text-sm font-mono">{bgColor}</p>
+                    </div>
+                    <input type="color" className="sr-only" value={bgColor} onChange={e => setBgColor(e.target.value)} />
+                  </label>
+                </div>
+              </div>
+
+              {/* 프리셋 조합 */}
+              <div>
+                <p className="text-sm text-gray-500 mb-2">프리셋 조합</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { fg: '#000000', bg: '#FFFFFF', label: '기본' },
+                    { fg: '#007AFF', bg: '#FFFFFF', label: '블루' },
+                    { fg: '#FFFFFF', bg: '#1C1C1E', label: '다크' },
+                    { fg: '#34C759', bg: '#F0FFF4', label: '그린' },
+                    { fg: '#FF3B30', bg: '#FFF0F0', label: '레드' },
+                    { fg: '#5856D6', bg: '#F5F3FF', label: '퍼플' },
+                    { fg: '#FF9500', bg: '#FFFBEB', label: '오렌지' },
+                    { fg: '#FF2D55', bg: '#FDF2F8', label: '핑크' },
+                  ].map(p => (
+                    <button key={p.label}
+                      onClick={() => { setFgColor(p.fg); setBgColor(p.bg); }}
+                      className="flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all">
+                      <div className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center" style={{ backgroundColor: p.bg }}>
+                        <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: p.fg }} />
+                      </div>
+                      <span className="text-[11px] text-gray-600">{p.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </BottomSheet>
+
+          {/* ========================================
+              🏷️ 로고 BottomSheet
+              ======================================== */}
+          <BottomSheet isOpen={showLogoSheet} onClose={() => setShowLogoSheet(false)} title="로고 설정">
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">로고 표시</p>
+                  <p className="text-xs text-gray-400 mt-0.5">QR 코드 중앙에 로고를 넣습니다</p>
+                </div>
+                <IOSToggle on={hasLogo} onChange={setHasLogo} />
+              </div>
+
+              {hasLogo && (
+                <>
+                  {logoImg ? (
+                    <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl">
+                      <img src={logoImg.src} alt="logo" className="w-14 h-14 rounded-xl object-cover" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">로고 업로드됨</p>
+                        <p className="text-xs text-gray-400">중앙에 표시됩니다</p>
+                      </div>
+                      <IOSButton variant="ghost" size="sm" onClick={() => { setLogoImg(null); setHasLogo(false); }}>
+                        제거
+                      </IOSButton>
+                    </div>
+                  ) : (
+                    <IOSButton variant="secondary" size="lg" onClick={() => logoInputRef.current?.click()}>
+                      📁 로고 이미지 선택
+                    </IOSButton>
+                  )}
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+
+                  <div className="p-3 bg-[#FFF9E6] rounded-xl">
+                    <p className="text-xs text-[#996600]">💡 로고를 넣으면 QR 인식률이 떨어질 수 있습니다. 오류 보정을 <strong>H(30%)</strong>로 설정하는 것을 권장합니다.</p>
+                  </div>
+
+                  {errorCorrection !== 'H' && (
+                    <IOSButton variant="ghost" size="md" onClick={() => setErrorCorrection('H')} className="w-full">
+                      오류 보정을 H(30%)로 변경
+                    </IOSButton>
+                  )}
+                </>
+              )}
+            </div>
+          </BottomSheet>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📝 입력 필드 컴포넌트
+    // ========================================
+    function InputFields({ type, fields, updateField }) {
+      const inputClass = "w-full p-3.5 bg-[#F2F2F7] rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all placeholder:text-gray-400";
+
+      switch (type) {
+        case 'text':
+          return (
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-2 block">텍스트</label>
+              <textarea
+                value={fields.text || ''}
+                onChange={e => updateField('text', e.target.value)}
+                placeholder="텍스트를 입력하세요"
+                rows={3}
+                className={`${inputClass} resize-none`} />
+            </div>
+          );
+
+        case 'url':
+          return (
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-2 block">URL</label>
+              <input type="url"
+                value={fields.url || ''}
+                onChange={e => updateField('url', e.target.value)}
+                placeholder="https://example.com"
+                className={inputClass} />
+            </div>
+          );
+
+        case 'wifi':
+          return (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">네트워크 이름 (SSID)</label>
+                <input type="text"
+                  value={fields.wifiName || ''}
+                  onChange={e => updateField('wifiName', e.target.value)}
+                  placeholder="Wi-Fi 이름"
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">비밀번호</label>
+                <input type="text"
+                  value={fields.wifiPass || ''}
+                  onChange={e => updateField('wifiPass', e.target.value)}
+                  placeholder="비밀번호"
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">보안 유형</label>
+                <IOSSegment
+                  options={[
+                    { value: 'WPA', label: 'WPA/WPA2' },
+                    { value: 'WEP', label: 'WEP' },
+                    { value: 'nopass', label: '없음' },
+                  ]}
+                  value={fields.wifiAuth || 'WPA'}
+                  onChange={v => updateField('wifiAuth', v)}
+                />
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-sm text-gray-500">숨겨진 네트워크</span>
+                <IOSToggle on={fields.wifiHidden || false} onChange={v => updateField('wifiHidden', v)} />
+              </div>
+            </div>
+          );
+
+        case 'email':
+          return (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">이메일 주소</label>
+                <input type="email"
+                  value={fields.email || ''}
+                  onChange={e => updateField('email', e.target.value)}
+                  placeholder="hello@example.com"
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">제목 (선택)</label>
+                <input type="text"
+                  value={fields.emailSubject || ''}
+                  onChange={e => updateField('emailSubject', e.target.value)}
+                  placeholder="메일 제목"
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">내용 (선택)</label>
+                <textarea
+                  value={fields.emailBody || ''}
+                  onChange={e => updateField('emailBody', e.target.value)}
+                  placeholder="메일 내용"
+                  rows={2}
+                  className={`${inputClass} resize-none`} />
+              </div>
+            </div>
+          );
+
+        case 'phone':
+          return (
+            <div>
+              <label className="text-sm font-medium text-gray-500 mb-2 block">전화번호</label>
+              <input type="tel"
+                value={fields.phone || ''}
+                onChange={e => updateField('phone', e.target.value)}
+                placeholder="010-1234-5678"
+                className={inputClass} />
+            </div>
+          );
+
+        case 'sms':
+          return (
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">전화번호</label>
+                <input type="tel"
+                  value={fields.smsNumber || ''}
+                  onChange={e => updateField('smsNumber', e.target.value)}
+                  placeholder="010-1234-5678"
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500 mb-2 block">메시지 (선택)</label>
+                <textarea
+                  value={fields.smsBody || ''}
+                  onChange={e => updateField('smsBody', e.target.value)}
+                  placeholder="보낼 메시지"
+                  rows={2}
+                  className={`${inputClass} resize-none`} />
+              </div>
+            </div>
+          );
+
+        default:
+          return null;
+      }
+    }
+
+    // ========================================
+    // 🚀 렌더링
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
