@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>종합소득세 계산기</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            ios: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'sans-serif'],
+          },
+          colors: {
+            ios: {
+              bg: '#f2f2f7',
+              card: '#ffffff',
+              blue: '#007aff',
+              green: '#34c759',
+              red: '#ff3b30',
+              orange: '#ff9500',
+              purple: '#af52de',
+              gray1: '#8e8e93',
+              gray2: '#aeaeb2',
+              gray3: '#c7c7cc',
+              gray4: '#d1d1d6',
+              gray5: '#e5e5ea',
+              gray6: '#f2f2f7',
+              label: '#000000',
+              separator: 'rgba(60,60,67,0.12)',
+            },
+          },
+          keyframes: {
+            iosSlideUp: {
+              from: { opacity: '0', transform: 'translateY(30px)' },
+              to: { opacity: '1', transform: 'translateY(0)' },
+            },
+            iosFade: {
+              from: { opacity: '0' },
+              to: { opacity: '1' },
+            },
+          },
+          animation: {
+            'ios-slide': 'iosSlideUp 0.35s cubic-bezier(0.2,0.9,0.3,1) both',
+            'ios-fade': 'iosFade 0.25s ease both',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background: #f2f2f7; -webkit-font-smoothing: antialiased; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    .ios-inset { border-radius: 10px; }
+    .ios-separator { height: 0.5px; background: rgba(60,60,67,0.12); margin-left: 16px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useCallback, useMemo } = React;
+
+    // ========================================
+    // Design System Components (iOS Style)
+    // ========================================
+    function IOSGroupedCard({ title, footer, children, className = '' }) {
+      return (
+        <div className={`mb-6 ${className}`}>
+          {title && (
+            <h2 className="text-[13px] font-normal text-ios-gray1 uppercase tracking-wide px-5 mb-[6px] font-ios">{title}</h2>
+          )}
+          <div className="bg-ios-card ios-inset mx-0 overflow-hidden">
+            {children}
+          </div>
+          {footer && (
+            <p className="text-[13px] font-normal text-ios-gray1 px-5 mt-[6px] font-ios">{footer}</p>
+          )}
+        </div>
+      );
+    }
+
+    function IOSRow({ label, value, right, isLast = false, sub }) {
+      return (
+        <>
+          <div className="flex items-center justify-between px-4 py-[11px] w-full">
+            <div>
+              <span className="text-[17px] font-ios text-ios-label">{label}</span>
+              {sub && <p className="text-[13px] font-ios text-ios-gray1 mt-0.5">{sub}</p>}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {value && <span className="text-[17px] font-ios text-ios-gray1">{value}</span>}
+              {right}
+            </div>
+          </div>
+          {!isLast && <div className="ios-separator" />}
+        </>
+      );
+    }
+
+    function IOSInputRow({ label, value, onChange, placeholder, unit, sub }) {
+      return (
+        <>
+          <div className="flex items-center justify-between px-4 py-[11px]">
+            <div className="flex-shrink-0 mr-4">
+              <span className="text-[17px] font-ios text-ios-label">{label}</span>
+              {sub && <p className="text-[13px] font-ios text-ios-gray1 mt-0.5">{sub}</p>}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="bg-transparent text-[17px] font-ios outline-none text-right w-32 placeholder-ios-gray3"
+              />
+              {unit && <span className="text-[17px] font-ios text-ios-gray1 flex-shrink-0">{unit}</span>}
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    function IOSToggle({ checked, onChange }) {
+      return (
+        <button
+          onClick={() => onChange(!checked)}
+          className={`relative w-[51px] h-[31px] rounded-full transition-colors duration-200 flex-shrink-0
+            ${checked ? 'bg-ios-green' : 'bg-ios-gray5'}`}
+          role="switch" aria-checked={checked}
+        >
+          <div className={`absolute top-[2px] w-[27px] h-[27px] bg-white rounded-full shadow-md transition-transform duration-200
+            ${checked ? 'translate-x-[22px]' : 'translate-x-[2px]'}`} />
+        </button>
+      );
+    }
+
+    function IOSSegment({ options, value, onChange }) {
+      return (
+        <div className="flex bg-ios-gray5 rounded-[9px] p-[2px]">
+          {options.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onChange(opt.value)}
+              className={`flex-1 py-[6px] px-2 text-[13px] font-semibold font-ios rounded-[7px] transition-all duration-200
+                ${value === opt.value ? 'bg-white text-ios-label shadow-sm' : 'text-ios-gray1'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    function IOSButton({ children, onClick, variant = 'primary', className = '' }) {
+      const variants = {
+        primary: 'bg-ios-blue text-white active:bg-blue-600',
+        secondary: 'bg-ios-gray5 text-ios-blue active:bg-ios-gray4',
+      };
+      return (
+        <button onClick={onClick} className={`w-full py-[14px] rounded-[14px] text-[17px] font-semibold font-ios transition-colors ${variants[variant]} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function IOSSheet({ isOpen, onClose, title, children }) {
+      if (!isOpen) return null;
+      return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+          <div className="absolute inset-0 bg-black/30 animate-ios-fade" />
+          <div className="relative bg-ios-bg w-full max-w-lg rounded-t-[14px] max-h-[90vh] overflow-y-auto animate-ios-slide pb-8"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1"><div className="w-9 h-[5px] bg-ios-gray3 rounded-full" /></div>
+            <div className="flex items-center justify-between px-5 py-3">
+              <div className="w-16" />
+              <h2 className="text-[17px] font-semibold font-ios text-ios-label">{title}</h2>
+              <button onClick={onClose} className="text-ios-blue text-[17px] font-ios w-16 text-right">완료</button>
+            </div>
+            <div className="px-4">{children}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 종합소득세 계산 로직 (배열, 반복문, 조건 분기)
+    // ========================================
+
+    // 2024년 기준 종합소득세 과세표준 구간 (배열)
+    const TAX_BRACKETS = [
+      { limit: 14000000,   rate: 6,  deduction: 0 },
+      { limit: 50000000,   rate: 15, deduction: 1260000 },
+      { limit: 88000000,   rate: 24, deduction: 5760000 },
+      { limit: 150000000,  rate: 35, deduction: 15440000 },
+      { limit: 300000000,  rate: 38, deduction: 19940000 },
+      { limit: 500000000,  rate: 40, deduction: 25940000 },
+      { limit: 1000000000, rate: 42, deduction: 35940000 },
+      { limit: Infinity,   rate: 45, deduction: 65940000 },
+    ];
+
+    // 소득 유형별 필요경비율 (배열)
+    const INCOME_TYPES = [
+      { value: 'salary',    label: '근로소득', expenseDesc: '근로소득공제 자동 적용' },
+      { value: 'business',  label: '사업소득', expenseDesc: '필요경비 직접 입력' },
+      { value: 'freelance', label: '프리랜서(3.3%)', expenseDesc: '필요경비 직접 입력' },
+      { value: 'rental',    label: '임대소득', expenseDesc: '필요경비 직접 입력' },
+      { value: 'other',     label: '기타소득', expenseDesc: '필요경비 60% 자동 or 직접 입력' },
+    ];
+
+    // 근로소득공제 계산 (조건 분기)
+    function calcSalaryDeduction(totalSalary) {
+      if (totalSalary <= 5000000) return totalSalary * 0.70;
+      if (totalSalary <= 15000000) return 3500000 + (totalSalary - 5000000) * 0.40;
+      if (totalSalary <= 45000000) return 7500000 + (totalSalary - 15000000) * 0.15;
+      if (totalSalary <= 100000000) return 12000000 + (totalSalary - 45000000) * 0.05;
+      return 14750000 + (totalSalary - 100000000) * 0.02;
+    }
+
+    // 종합소득세 산출세액 계산 (반복문 + 조건 분기)
+    function calcIncomeTax(taxableIncome) {
+      if (taxableIncome <= 0) return { tax: 0, bracket: null, effectiveRate: 0, steps: [] };
+
+      let tax = 0;
+      let bracket = null;
+      const steps = [];
+
+      // 반복문: 과세표준 구간 배열 순회
+      for (let i = 0; i < TAX_BRACKETS.length; i++) {
+        const b = TAX_BRACKETS[i];
+        // 조건 분기: 해당 구간에 속하는지 확인
+        if (taxableIncome <= b.limit) {
+          tax = Math.floor(taxableIncome * (b.rate / 100) - b.deduction);
+          bracket = b;
+
+          // 각 구간별 세금 상세 (반복문)
+          let remaining = taxableIncome;
+          for (let j = 0; j <= i; j++) {
+            const prevLimit = j === 0 ? 0 : TAX_BRACKETS[j - 1].limit;
+            const curLimit = TAX_BRACKETS[j].limit;
+            const amount = j === i ? remaining : Math.min(remaining, curLimit - prevLimit);
+            steps.push({
+              range: `${(prevLimit / 10000).toLocaleString()}만원 ~ ${curLimit === Infinity ? '' : (curLimit / 10000).toLocaleString() + '만원'}`,
+              rate: TAX_BRACKETS[j].rate,
+              amount,
+              tax: Math.floor(amount * TAX_BRACKETS[j].rate / 100),
+            });
+            remaining -= amount;
+            if (remaining <= 0) break;
+          }
+          break;
+        }
+      }
+
+      const effectiveRate = taxableIncome > 0 ? ((tax / taxableIncome) * 100) : 0;
+      return { tax: Math.max(0, tax), bracket, effectiveRate, steps };
+    }
+
+    // 전체 종합소득세 계산
+    function calculateComprehensiveTax(incomes, deductions) {
+      // 배열: 소득 항목 순회하여 총 소득금액 계산
+      let totalIncome = 0;
+      let totalExpenses = 0;
+      const incomeDetails = [];
+
+      // 반복문: 각 소득 항목 처리
+      for (let i = 0; i < incomes.length; i++) {
+        const inc = incomes[i];
+        const gross = parseInt(inc.amount) || 0;
+        let expense = 0;
+
+        // 조건 분기: 소득 유형별 필요경비 계산
+        if (inc.type === 'salary') {
+          expense = Math.floor(calcSalaryDeduction(gross));
+        } else if (inc.type === 'other' && !inc.customExpense) {
+          expense = Math.floor(gross * 0.6);
+        } else {
+          expense = parseInt(inc.expense) || 0;
+        }
+
+        const netIncome = Math.max(0, gross - expense);
+        totalIncome += netIncome;
+        totalExpenses += expense;
+
+        incomeDetails.push({
+          ...inc,
+          gross,
+          expense,
+          netIncome,
+          typeName: INCOME_TYPES.find(t => t.value === inc.type)?.label || inc.type,
+        });
+      }
+
+      // 배열: 소득공제 항목 합산
+      let totalDeduction = 0;
+      const deductionDetails = [];
+
+      // 기본공제 150만원
+      deductionDetails.push({ name: '기본공제 (본인)', amount: 1500000, auto: true });
+      totalDeduction += 1500000;
+
+      // 반복문: 추가 공제 항목 순회
+      for (let i = 0; i < deductions.length; i++) {
+        const d = deductions[i];
+        const amount = parseInt(d.amount) || 0;
+        if (amount > 0) {
+          totalDeduction += amount;
+          deductionDetails.push({ name: d.name, amount, auto: false });
+        }
+      }
+
+      // 과세표준 = 소득금액 - 소득공제
+      const taxableIncome = Math.max(0, totalIncome - totalDeduction);
+
+      // 산출세액
+      const taxResult = calcIncomeTax(taxableIncome);
+
+      // 지방소득세 (산출세액의 10%)
+      const localTax = Math.floor(taxResult.tax * 0.1);
+
+      // 총 세금
+      const totalTax = taxResult.tax + localTax;
+
+      return {
+        incomeDetails,
+        deductionDetails,
+        totalGross: incomeDetails.reduce((s, d) => s + d.gross, 0),
+        totalExpenses,
+        totalIncome,
+        totalDeduction,
+        taxableIncome,
+        incomeTax: taxResult.tax,
+        localTax,
+        totalTax,
+        effectiveRate: taxResult.effectiveRate,
+        bracket: taxResult.bracket,
+        steps: taxResult.steps,
+      };
+    }
+
+    // ========================================
+    // Page Components
+    // ========================================
+    function IncomeItem({ income, index, onUpdate, onRemove, canRemove }) {
+      const typeInfo = INCOME_TYPES.find(t => t.value === income.type);
+      const showExpense = income.type !== 'salary' && (income.type !== 'other' || income.customExpense);
+
+      return (
+        <IOSGroupedCard title={`소득 ${index + 1}`}>
+          {/* 소득 유형 */}
+          <div className="px-4 py-[11px] flex items-center justify-between">
+            <span className="text-[17px] font-ios text-ios-label flex-shrink-0">유형</span>
+            <select
+              value={income.type}
+              onChange={e => onUpdate(index, { ...income, type: e.target.value })}
+              className="bg-transparent text-[17px] font-ios text-ios-blue text-right outline-none appearance-none cursor-pointer"
+            >
+              {INCOME_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="ios-separator" />
+
+          {/* 총 수입 */}
+          <IOSInputRow label="총 수입금액" value={income.amount} onChange={v => onUpdate(index, { ...income, amount: v })} placeholder="0" unit="원" />
+          <div className="ios-separator" />
+
+          {/* 필요경비 */}
+          {income.type === 'salary' ? (
+            <IOSRow label="근로소득공제" value={`${Math.floor(calcSalaryDeduction(parseInt(income.amount) || 0)).toLocaleString()}원`} sub="자동 계산" />
+          ) : income.type === 'other' ? (
+            <>
+              <div className="px-4 py-[11px] flex items-center justify-between">
+                <span className="text-[17px] font-ios text-ios-label">경비 직접 입력</span>
+                <IOSToggle checked={!!income.customExpense} onChange={v => onUpdate(index, { ...income, customExpense: v })} />
+              </div>
+              {income.customExpense ? (
+                <>
+                  <div className="ios-separator" />
+                  <IOSInputRow label="필요경비" value={income.expense} onChange={v => onUpdate(index, { ...income, expense: v })} placeholder="0" unit="원" />
+                </>
+              ) : (
+                <>
+                  <div className="ios-separator" />
+                  <IOSRow label="필요경비 (60%)" value={`${Math.floor((parseInt(income.amount) || 0) * 0.6).toLocaleString()}원`} sub="기타소득 자동 적용" />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <IOSInputRow label="필요경비" value={income.expense} onChange={v => onUpdate(index, { ...income, expense: v })} placeholder="0" unit="원" />
+            </>
+          )}
+
+          {/* 소득금액 */}
+          {(() => {
+            const gross = parseInt(income.amount) || 0;
+            let exp = 0;
+            if (income.type === 'salary') exp = Math.floor(calcSalaryDeduction(gross));
+            else if (income.type === 'other' && !income.customExpense) exp = Math.floor(gross * 0.6);
+            else exp = parseInt(income.expense) || 0;
+            const net = Math.max(0, gross - exp);
+            return (
+              <>
+                <div className="ios-separator" />
+                <IOSRow label="소득금액" isLast={!canRemove}
+                  right={<span className="text-[17px] font-bold font-ios text-ios-blue">{net.toLocaleString()}원</span>} />
+              </>
+            );
+          })()}
+
+          {canRemove && (
+            <>
+              <div className="ios-separator" />
+              <button onClick={() => onRemove(index)} className="w-full px-4 py-[11px] text-ios-red text-[17px] font-ios text-center active:bg-ios-gray5 transition-colors">
+                이 소득 삭제
+              </button>
+            </>
+          )}
+        </IOSGroupedCard>
+      );
+    }
+
+    function ResultSheet({ isOpen, onClose, result }) {
+      if (!result) return null;
+      const r = result;
+
+      return (
+        <IOSSheet isOpen={isOpen} onClose={onClose} title="종합소득세 결과">
+          {/* 최종 세액 */}
+          <div className="bg-ios-card ios-inset p-5 mb-6 text-center">
+            <p className="text-[13px] font-ios text-ios-gray1 mb-1">납부할 총 세금</p>
+            <p className="text-[34px] font-bold font-ios text-ios-blue">{r.totalTax.toLocaleString()}원</p>
+            <p className="text-[13px] font-ios text-ios-gray1 mt-1">실효세율 {r.effectiveRate.toFixed(1)}%</p>
+          </div>
+
+          {/* 계산 과정 */}
+          <IOSGroupedCard title="소득 내역">
+            {r.incomeDetails.map((d, i) => (
+              <div key={i}>
+                <div className="px-4 py-[10px]">
+                  <div className="flex justify-between">
+                    <span className="text-[15px] font-ios text-ios-label">{d.typeName}</span>
+                    <span className="text-[15px] font-ios text-ios-label">{d.gross.toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <span className="text-[13px] font-ios text-ios-gray1">필요경비</span>
+                    <span className="text-[13px] font-ios text-ios-red">-{d.expense.toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <span className="text-[13px] font-ios text-ios-gray1">소득금액</span>
+                    <span className="text-[13px] font-ios text-ios-blue font-semibold">{d.netIncome.toLocaleString()}원</span>
+                  </div>
+                </div>
+                {i < r.incomeDetails.length - 1 && <div className="ios-separator" />}
+              </div>
+            ))}
+          </IOSGroupedCard>
+
+          <IOSGroupedCard title="계산 흐름">
+            <IOSRow label="총 수입금액" value={`${r.totalGross.toLocaleString()}원`} />
+            <IOSRow label="필요경비" value={`-${r.totalExpenses.toLocaleString()}원`} />
+            <IOSRow label="소득금액 합계" right={<span className="text-[17px] font-semibold font-ios text-ios-label">{r.totalIncome.toLocaleString()}원</span>} />
+            <IOSRow label="소득공제 합계" value={`-${r.totalDeduction.toLocaleString()}원`} />
+            <IOSRow label="과세표준" right={<span className="text-[17px] font-bold font-ios text-ios-blue">{r.taxableIncome.toLocaleString()}원</span>} />
+            {r.bracket && <IOSRow label="적용 세율" value={`${r.bracket.rate}%`} />}
+            <IOSRow label="산출세액" value={`${r.incomeTax.toLocaleString()}원`} />
+            <IOSRow label="지방소득세 (10%)" value={`${r.localTax.toLocaleString()}원`} isLast />
+          </IOSGroupedCard>
+
+          {/* 구간별 상세 */}
+          {r.steps.length > 0 && (
+            <IOSGroupedCard title="과세표준 구간별 세금">
+              {r.steps.map((s, i) => (
+                <div key={i}>
+                  <div className="px-4 py-[10px]">
+                    <div className="flex justify-between">
+                      <span className="text-[13px] font-ios text-ios-gray1">{s.range}</span>
+                      <span className="text-[13px] font-ios text-ios-gray1">{s.rate}%</span>
+                    </div>
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-[15px] font-ios text-ios-label">{s.amount.toLocaleString()}원</span>
+                      <span className="text-[15px] font-ios text-ios-blue font-semibold">{s.tax.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                  {i < r.steps.length - 1 && <div className="ios-separator" />}
+                </div>
+              ))}
+            </IOSGroupedCard>
+          )}
+
+          {/* 소득공제 내역 */}
+          <IOSGroupedCard title="소득공제 내역">
+            {r.deductionDetails.map((d, i) => (
+              <IOSRow key={i} label={d.name} value={`${d.amount.toLocaleString()}원`}
+                      isLast={i === r.deductionDetails.length - 1} />
+            ))}
+          </IOSGroupedCard>
+
+          <div className="px-1 mt-2">
+            <IOSButton onClick={() => {
+              const lines = [
+                `[종합소득세 계산 결과]`,
+                `총 수입: ${r.totalGross.toLocaleString()}원`,
+                `소득금액: ${r.totalIncome.toLocaleString()}원`,
+                `소득공제: ${r.totalDeduction.toLocaleString()}원`,
+                `과세표준: ${r.taxableIncome.toLocaleString()}원`,
+                `산출세액: ${r.incomeTax.toLocaleString()}원`,
+                `지방소득세: ${r.localTax.toLocaleString()}원`,
+                `총 납부세액: ${r.totalTax.toLocaleString()}원`,
+                `실효세율: ${r.effectiveRate.toFixed(1)}%`,
+              ];
+              navigator.clipboard.writeText(lines.join('\n'));
+            }} variant="secondary">결과 복사</IOSButton>
+          </div>
+        </IOSSheet>
+      );
+    }
+
+    // ========================================
+    // App Component
+    // ========================================
+    function App() {
+      const [incomes, setIncomes] = useState([
+        { type: 'salary', amount: '', expense: '', customExpense: false },
+      ]);
+      const [deductions, setDeductions] = useState([
+        { name: '국민연금', amount: '' },
+        { name: '건강보험료', amount: '' },
+        { name: '주택자금공제', amount: '' },
+        { name: '신용카드공제', amount: '' },
+      ]);
+      const [showResult, setShowResult] = useState(false);
+      const [result, setResult] = useState(null);
+
+      const addIncome = useCallback(() => {
+        setIncomes(prev => [...prev, { type: 'business', amount: '', expense: '', customExpense: false }]);
+      }, []);
+
+      const removeIncome = useCallback((idx) => {
+        setIncomes(prev => prev.filter((_, i) => i !== idx));
+      }, []);
+
+      const updateIncome = useCallback((idx, updated) => {
+        setIncomes(prev => prev.map((inc, i) => i === idx ? updated : inc));
+      }, []);
+
+      const updateDeduction = useCallback((idx, field, val) => {
+        setDeductions(prev => prev.map((d, i) => i === idx ? { ...d, [field]: val } : d));
+      }, []);
+
+      const addDeduction = useCallback(() => {
+        setDeductions(prev => [...prev, { name: '', amount: '' }]);
+      }, []);
+
+      const removeDeduction = useCallback((idx) => {
+        setDeductions(prev => prev.filter((_, i) => i !== idx));
+      }, []);
+
+      const handleCalculate = useCallback(() => {
+        setResult(calculateComprehensiveTax(incomes, deductions));
+        setShowResult(true);
+      }, [incomes, deductions]);
+
+      const handleReset = useCallback(() => {
+        setIncomes([{ type: 'salary', amount: '', expense: '', customExpense: false }]);
+        setDeductions([
+          { name: '국민연금', amount: '' },
+          { name: '건강보험료', amount: '' },
+          { name: '주택자금공제', amount: '' },
+          { name: '신용카드공제', amount: '' },
+        ]);
+        setResult(null);
+      }, []);
+
+      const hasIncome = incomes.some(inc => parseInt(inc.amount) > 0);
+
+      return (
+        <div className="min-h-screen bg-ios-bg font-ios pb-10">
+          {/* 네비게이션 바 */}
+          <div className="bg-ios-bg/80 backdrop-blur-xl sticky top-0 z-40 border-b border-ios-separator">
+            <div className="max-w-lg mx-auto px-5 py-3 flex items-center justify-between">
+              <button onClick={handleReset} className="text-ios-blue text-[17px]">초기화</button>
+              <h1 className="text-[17px] font-semibold text-ios-label">종합소득세 계산기</h1>
+              <span className="w-14" />
+            </div>
+          </div>
+
+          <div className="max-w-lg mx-auto px-4 pt-4">
+            {/* 과세표준 구간 안내 */}
+            <IOSGroupedCard title="2024년 종합소득세 세율">
+              {TAX_BRACKETS.map((b, i) => {
+                const prevLimit = i === 0 ? 0 : TAX_BRACKETS[i - 1].limit;
+                return (
+                  <IOSRow key={i}
+                    label={`${(prevLimit / 10000).toLocaleString()}만 ~ ${b.limit === Infinity ? '∞' : (b.limit / 10000).toLocaleString() + '만'}`}
+                    value={`${b.rate}%`}
+                    isLast={i === TAX_BRACKETS.length - 1}
+                  />
+                );
+              })}
+            </IOSGroupedCard>
+
+            {/* 소득 항목 */}
+            <div className="flex items-center justify-between px-5 mb-2">
+              <span className="text-[13px] font-normal text-ios-gray1 uppercase tracking-wide font-ios">소득 항목</span>
+              <button onClick={addIncome} className="text-ios-blue text-[15px] font-ios">+ 소득 추가</button>
+            </div>
+            {incomes.map((inc, idx) => (
+              <IncomeItem
+                key={idx}
+                income={inc}
+                index={idx}
+                onUpdate={updateIncome}
+                onRemove={removeIncome}
+                canRemove={incomes.length > 1}
+              />
+            ))}
+
+            {/* 소득공제 */}
+            <div className="flex items-center justify-between px-5 mb-2">
+              <span className="text-[13px] font-normal text-ios-gray1 uppercase tracking-wide font-ios">소득공제</span>
+              <button onClick={addDeduction} className="text-ios-blue text-[15px] font-ios">+ 항목 추가</button>
+            </div>
+            <IOSGroupedCard footer="기본공제(본인) 150만원은 자동 적용됩니다.">
+              {deductions.map((d, idx) => (
+                <div key={idx}>
+                  <div className="px-4 py-[10px] flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={d.name}
+                      onChange={e => updateDeduction(idx, 'name', e.target.value)}
+                      placeholder="공제 항목명"
+                      className="flex-1 bg-transparent text-[17px] font-ios outline-none placeholder-ios-gray3 min-w-0"
+                    />
+                    <input
+                      type="number"
+                      value={d.amount}
+                      onChange={e => updateDeduction(idx, 'amount', e.target.value)}
+                      placeholder="0"
+                      className="bg-transparent text-[17px] font-ios outline-none text-right w-28 placeholder-ios-gray3"
+                    />
+                    <span className="text-[15px] text-ios-gray1 font-ios flex-shrink-0">원</span>
+                    <button onClick={() => removeDeduction(idx)} className="text-ios-red text-[15px] font-ios flex-shrink-0 ml-1">삭제</button>
+                  </div>
+                  {idx < deductions.length - 1 && <div className="ios-separator" />}
+                </div>
+              ))}
+            </IOSGroupedCard>
+
+            {/* 계산 버튼 */}
+            <div className="px-1">
+              <IOSButton onClick={handleCalculate} variant={hasIncome ? 'primary' : 'secondary'}>
+                세금 계산하기
+              </IOSButton>
+            </div>
+
+            <p className="text-center text-ios-gray2 text-[13px] font-ios mt-6 mb-4">
+              2024년 귀속 종합소득세 기준 · 참고용 계산입니다
+            </p>
+          </div>
+
+          <ResultSheet isOpen={showResult} onClose={() => setShowResult(false)} result={result} />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
