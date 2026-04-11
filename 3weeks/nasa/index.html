@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NASA APOD — 오늘의 우주 사진</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+KR:wght@300;400;500;600;700&display=swap');
+
+    html, body {
+      background: #0a0a0f;
+      color: #f5f5f0;
+      font-family: 'Inter', 'Noto Serif KR', sans-serif;
+    }
+
+    .font-serif-display {
+      font-family: 'Cormorant Garamond', 'Noto Serif KR', serif;
+    }
+
+    .font-serif-kr {
+      font-family: 'Noto Serif KR', serif;
+    }
+
+    /* Star field */
+    .starfield {
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(91, 33, 182, 0.15), transparent 50%),
+        radial-gradient(ellipse at 80% 70%, rgba(30, 64, 175, 0.2), transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(10, 10, 20, 1), #000 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .starfield::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(1px 1px at 20px 30px, white, transparent),
+        radial-gradient(1px 1px at 40px 70px, white, transparent),
+        radial-gradient(1px 1px at 50px 160px, white, transparent),
+        radial-gradient(1px 1px at 90px 40px, white, transparent),
+        radial-gradient(1px 1px at 130px 80px, white, transparent),
+        radial-gradient(1px 1px at 160px 120px, white, transparent),
+        radial-gradient(2px 2px at 200px 200px, white, transparent),
+        radial-gradient(1px 1px at 240px 60px, white, transparent),
+        radial-gradient(1px 1px at 280px 180px, white, transparent),
+        radial-gradient(1px 1px at 320px 20px, white, transparent);
+      background-size: 350px 220px;
+      background-repeat: repeat;
+      opacity: 0.5;
+      animation: twinkle 6s ease-in-out infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 0.8; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-track { background: #0a0a0f; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+    /* Fade-in */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+      animation: fadeInUp 0.8s ease-out forwards;
+    }
+
+    /* Drop cap */
+    .drop-cap::first-letter {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 5rem;
+      font-weight: 700;
+      float: left;
+      line-height: 0.85;
+      padding: 0.3rem 0.7rem 0 0;
+      color: #fde68a;
+    }
+
+    /* Loading spinner */
+    .cosmic-loader {
+      width: 60px;
+      height: 60px;
+      border: 3px solid rgba(253, 230, 138, 0.2);
+      border-top-color: #fde68a;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Image zoom hover */
+    .zoom-hover {
+      overflow: hidden;
+    }
+    .zoom-hover img {
+      transition: transform 0.8s ease;
+    }
+    .zoom-hover:hover img {
+      transform: scale(1.04);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // ⚙️ Hooks & Config
+    // ========================================
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    const NASA_API_KEY = 'r7npfq1uWjZub1xbYh8ObmuvkoXuIjinA70j0cW7';
+    const APOD_ENDPOINT = 'https://api.nasa.gov/planetary/apod';
+
+    const formatDate = (d) => {
+      if (!d) return '';
+      const date = typeof d === 'string' ? new Date(d) : d;
+      return date.toISOString().split('T')[0];
+    };
+
+    const formatDateKorean = (dateStr) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      const months = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+      return `${d.getFullYear()}년 ${months[d.getMonth()]} ${d.getDate()}일`;
+    };
+
+    const formatDateMagazine = (dateStr) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      return `${months[d.getMonth()]}. ${d.getDate()}, ${d.getFullYear()}`;
+    };
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ variant = 'primary', size = 'md', disabled, onClick, children, className = '', ...rest }) {
+      const base = 'inline-flex items-center justify-center font-medium transition-all duration-300 rounded-full border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black disabled:opacity-40 disabled:cursor-not-allowed';
+      const sizes = {
+        sm: 'px-3 py-1.5 text-xs tracking-wider',
+        md: 'px-5 py-2.5 text-sm tracking-wider',
+        lg: 'px-7 py-3 text-base tracking-wider',
+      };
+      const variants = {
+        primary: 'bg-amber-200 text-black border-amber-200 hover:bg-amber-100 focus:ring-amber-200',
+        secondary: 'bg-transparent text-amber-100 border-amber-100/40 hover:border-amber-100 hover:bg-amber-100/5 focus:ring-amber-200',
+        ghost: 'bg-transparent text-zinc-300 border-transparent hover:text-white hover:bg-white/5 focus:ring-zinc-400',
+      };
+      return (
+        <button
+          disabled={disabled}
+          onClick={onClick}
+          className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
+          {...rest}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Badge({ children, className = '' }) {
+      return (
+        <span className={`inline-block px-3 py-1 text-[10px] tracking-[0.25em] uppercase font-semibold border border-amber-200/30 text-amber-200 bg-amber-200/5 rounded-full ${className}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Input({ type = 'text', label, value, onChange, className = '', ...rest }) {
+      return (
+        <label className={`block ${className}`}>
+          {label && <span className="block text-[10px] tracking-[0.25em] uppercase text-zinc-400 mb-2">{label}</span>}
+          <input
+            type={type}
+            value={value}
+            onChange={onChange}
+            className="w-full bg-transparent border-b border-zinc-600 focus:border-amber-200 text-zinc-100 py-2 px-0 outline-none transition-colors"
+            style={{ colorScheme: 'dark' }}
+            {...rest}
+          />
+        </label>
+      );
+    }
+
+    function Modal({ isOpen, onClose, children }) {
+      useEffect(() => {
+        if (!isOpen) return;
+        const handleKey = (e) => e.key === 'Escape' && onClose();
+        window.addEventListener('keydown', handleKey);
+        document.body.style.overflow = 'hidden';
+        return () => {
+          window.removeEventListener('keydown', handleKey);
+          document.body.style.overflow = '';
+        };
+      }, [isOpen, onClose]);
+
+      if (!isOpen) return null;
+      return (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-fade-in-up"
+          onClick={onClose}
+        >
+          <div
+            className="relative max-w-7xl w-full max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              aria-label="닫기"
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/60 border border-white/20 text-white hover:bg-white hover:text-black transition-all flex items-center justify-center text-xl"
+            >
+              ✕
+            </button>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Common Components
+    // ========================================
+    function Header({ onTodayClick, onGalleryClick, activeView }) {
+      return (
+        <header className="sticky top-0 z-40 bg-black/70 backdrop-blur-md border-b border-white/10">
+          <div className="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-200 to-amber-400 flex items-center justify-center text-black font-bold text-sm">
+                ★
+              </div>
+              <div>
+                <div className="text-[10px] tracking-[0.3em] text-amber-200 uppercase">NASA</div>
+                <div className="font-serif-display text-lg leading-none text-white">Cosmos Daily</div>
+              </div>
+            </div>
+            <nav className="flex items-center gap-1 sm:gap-2">
+              <button
+                onClick={onTodayClick}
+                className={`px-3 sm:px-4 py-2 text-[11px] tracking-[0.2em] uppercase transition-colors ${activeView === 'today' ? 'text-amber-200' : 'text-zinc-400 hover:text-white'}`}
+              >
+                Today
+              </button>
+              <button
+                onClick={onGalleryClick}
+                className={`px-3 sm:px-4 py-2 text-[11px] tracking-[0.2em] uppercase transition-colors ${activeView === 'gallery' ? 'text-amber-200' : 'text-zinc-400 hover:text-white'}`}
+              >
+                Gallery
+              </button>
+            </nav>
+          </div>
+        </header>
+      );
+    }
+
+    function Footer() {
+      return (
+        <footer className="mt-24 border-t border-white/10 bg-black">
+          <div className="max-w-7xl mx-auto px-6 lg:px-12 py-12">
+            <div className="grid md:grid-cols-3 gap-8">
+              <div>
+                <div className="font-serif-display text-2xl text-white mb-2">Cosmos Daily</div>
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  매일 새로운 우주의 풍경을 기록합니다. NASA의 Astronomy Picture of the Day를 한국어 큐레이션으로 전달합니다.
+                </p>
+              </div>
+              <div>
+                <div className="text-[10px] tracking-[0.25em] uppercase text-amber-200 mb-3">Source</div>
+                <a
+                  href="https://apod.nasa.gov/apod/astropix.html"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-zinc-400 hover:text-white transition-colors block mb-1"
+                >
+                  apod.nasa.gov
+                </a>
+                <a
+                  href="https://api.nasa.gov"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-zinc-400 hover:text-white transition-colors block"
+                >
+                  api.nasa.gov
+                </a>
+              </div>
+              <div>
+                <div className="text-[10px] tracking-[0.25em] uppercase text-amber-200 mb-3">Credit</div>
+                <p className="text-xs text-zinc-500">
+                  Astronomy Picture of the Day (APOD)는 NASA와 Michigan Technological University가 1995년부터 공동 운영하는 프로젝트입니다.
+                </p>
+              </div>
+            </div>
+            <div className="mt-10 pt-6 border-t border-white/5 flex flex-col sm:flex-row justify-between text-[10px] tracking-[0.2em] uppercase text-zinc-600">
+              <span>© {new Date().getFullYear()} Cosmos Daily — Powered by NASA Open API</span>
+              <span className="mt-2 sm:mt-0">Single-file React Application</span>
+            </div>
+          </div>
+        </footer>
+      );
+    }
+
+    function LoadingState({ message = '우주 신호 수신 중...' }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-32">
+          <div className="cosmic-loader mb-6"></div>
+          <div className="text-[10px] tracking-[0.3em] uppercase text-amber-200">{message}</div>
+        </div>
+      );
+    }
+
+    function ErrorState({ error, onRetry }) {
+      return (
+        <div className="flex flex-col items-center justify-center py-32 text-center">
+          <div className="text-5xl mb-4">🛰️</div>
+          <div className="font-serif-display text-2xl text-white mb-2">신호를 잃었습니다</div>
+          <div className="text-sm text-zinc-400 mb-6 max-w-md">
+            {error?.message || '데이터를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.'}
+          </div>
+          {onRetry && <Button onClick={onRetry}>다시 시도</Button>}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Magazine Hero — 오늘의 천문학 사진
+    // ========================================
+    function MagazineHero({ apod, onImageClick }) {
+      const isVideo = apod.media_type === 'video';
+      const hdUrl = apod.hdurl || apod.url;
+
+      return (
+        <section className="starfield relative">
+          <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12 pt-16 pb-20">
+            {/* Masthead */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-12 animate-fade-in-up">
+              <div>
+                <div className="text-[10px] tracking-[0.4em] text-amber-200 uppercase mb-2">Astronomy Picture of the Day</div>
+                <div className="font-serif-display text-xs text-zinc-400 italic">Vol. {new Date(apod.date).getFullYear()} — {formatDateMagazine(apod.date)}</div>
+              </div>
+              <div className="mt-3 sm:mt-0 flex gap-2">
+                <Badge>{isVideo ? 'Video' : 'Image'}</Badge>
+                {apod.copyright && <Badge>© {apod.copyright.trim().split('\n')[0]}</Badge>}
+              </div>
+            </div>
+
+            {/* Title */}
+            <div className="animate-fade-in-up" style={{ animationDelay: '0.15s', opacity: 0 }}>
+              <h1 className="font-serif-display text-5xl sm:text-6xl lg:text-8xl leading-[0.95] text-white mb-6 tracking-tight">
+                {apod.title}
+              </h1>
+              <div className="h-px w-24 bg-amber-200 mb-6"></div>
+              <div className="text-sm tracking-[0.2em] uppercase text-zinc-400">
+                {formatDateKorean(apod.date)} · NASA · Michigan Tech
+              </div>
+            </div>
+          </div>
+
+          {/* Hero Image */}
+          <div className="relative max-w-7xl mx-auto px-6 lg:px-12 pb-16 animate-fade-in-up" style={{ animationDelay: '0.3s', opacity: 0 }}>
+            {isVideo ? (
+              <div className="relative aspect-video bg-black rounded-sm overflow-hidden border border-white/10">
+                <iframe
+                  src={apod.url}
+                  title={apod.title}
+                  className="absolute inset-0 w-full h-full"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                ></iframe>
+              </div>
+            ) : (
+              <button
+                onClick={() => onImageClick(hdUrl)}
+                className="zoom-hover block w-full group relative cursor-zoom-in"
+                aria-label="이미지 확대보기"
+              >
+                <img
+                  src={apod.url}
+                  alt={apod.title}
+                  className="w-full h-auto rounded-sm border border-white/10"
+                  loading="eager"
+                />
+                <div className="absolute bottom-4 right-4 px-3 py-1.5 bg-black/60 backdrop-blur-sm border border-white/20 rounded-full text-[10px] tracking-[0.2em] uppercase text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                  Click to Zoom
+                </div>
+              </button>
+            )}
+            {apod.copyright && (
+              <div className="mt-3 text-[10px] tracking-[0.15em] uppercase text-zinc-500 text-right">
+                Image Credit & Copyright: {apod.copyright.trim()}
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Magazine Article Body
+    // ========================================
+    function MagazineArticle({ apod }) {
+      return (
+        <article className="max-w-4xl mx-auto px-6 lg:px-12 py-16">
+          {/* Editor's Note */}
+          <div className="mb-12 pb-8 border-b border-white/10">
+            <div className="text-[10px] tracking-[0.3em] uppercase text-amber-200 mb-3">Editor's Note</div>
+            <p className="font-serif-kr text-zinc-400 text-sm leading-relaxed italic">
+              매일 아침, NASA는 전 세계 천문학자와 사진작가가 포착한 한 장의 경이로운 우주 이미지를 공개합니다. 오늘의 사진은 아래의 이야기를 담고 있습니다.
+            </p>
+          </div>
+
+          {/* Main Explanation */}
+          <div className="prose prose-invert max-w-none">
+            <div className="text-[10px] tracking-[0.3em] uppercase text-amber-200 mb-4">Feature Story</div>
+            <h2 className="font-serif-display text-3xl sm:text-4xl text-white mb-8 leading-tight">
+              {apod.title}
+            </h2>
+            <p className="drop-cap font-serif-kr text-zinc-200 text-lg leading-[1.9] tracking-wide">
+              {apod.explanation}
+            </p>
+          </div>
+
+          {/* Meta info */}
+          <div className="mt-16 pt-8 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-6 text-xs">
+            <div>
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Date</div>
+              <div className="text-zinc-200">{formatDateKorean(apod.date)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Media Type</div>
+              <div className="text-zinc-200 capitalize">{apod.media_type}</div>
+            </div>
+            {apod.copyright && (
+              <div className="col-span-2">
+                <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 mb-1">Credit</div>
+                <div className="text-zinc-200">{apod.copyright.trim()}</div>
+              </div>
+            )}
+          </div>
+
+          {/* External link */}
+          <div className="mt-12 flex flex-wrap gap-3">
+            {(apod.hdurl || apod.url) && apod.media_type === 'image' && (
+              <a
+                href={apod.hdurl || apod.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase bg-amber-200 text-black rounded-full hover:bg-amber-100 transition-colors"
+              >
+                원본 이미지 열기 →
+              </a>
+            )}
+            <a
+              href={`https://apod.nasa.gov/apod/ap${apod.date.replace(/-/g, '').slice(2)}.html`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-[11px] tracking-[0.2em] uppercase border border-amber-100/40 text-amber-100 rounded-full hover:border-amber-100 hover:bg-amber-100/5 transition-colors"
+            >
+              NASA APOD 원문 →
+            </a>
+          </div>
+        </article>
+      );
+    }
+
+    // ========================================
+    // 📄 Date Navigator
+    // ========================================
+    function DateNavigator({ currentDate, onDateChange, minDate = '1995-06-16' }) {
+      const maxDate = formatDate(new Date());
+      const current = new Date(currentDate);
+
+      const shiftDay = (days) => {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() + days);
+        const newStr = formatDate(d);
+        if (newStr > maxDate || newStr < minDate) return;
+        onDateChange(newStr);
+      };
+
+      const isMax = currentDate >= maxDate;
+      const isMin = currentDate <= minDate;
+
+      return (
+        <section className="max-w-4xl mx-auto px-6 lg:px-12 py-12 border-t border-white/10">
+          <div className="text-[10px] tracking-[0.3em] uppercase text-amber-200 mb-6 text-center">Browse by Date</div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => shiftDay(-1)}
+              disabled={isMin}
+            >
+              ← 이전 날
+            </Button>
+            <div className="flex flex-col items-center">
+              <input
+                type="date"
+                value={currentDate}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => onDateChange(e.target.value)}
+                className="bg-transparent border border-amber-200/40 text-amber-100 px-4 py-2 rounded-full text-sm tracking-wider focus:outline-none focus:border-amber-200 hover:border-amber-200 transition-colors"
+                style={{ colorScheme: 'dark' }}
+              />
+              <div className="mt-2 text-[10px] tracking-[0.2em] uppercase text-zinc-500">
+                {formatDateKorean(currentDate)}
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => shiftDay(1)}
+              disabled={isMax}
+            >
+              다음 날 →
+            </Button>
+          </div>
+          <div className="mt-6 text-center">
+            <Button variant="ghost" size="sm" onClick={() => onDateChange(formatDate(new Date()))}>
+              오늘로 돌아가기
+            </Button>
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Gallery View — 최근 APOD 모음
+    // ========================================
+    function GalleryView({ onSelectDate }) {
+      const [items, setItems] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        const fetchGallery = async () => {
+          try {
+            setLoading(true);
+            setError(null);
+            const end = new Date();
+            const start = new Date();
+            start.setDate(start.getDate() - 11);
+            const url = `${APOD_ENDPOINT}?api_key=${NASA_API_KEY}&start_date=${formatDate(start)}&end_date=${formatDate(end)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            setItems(data.reverse());
+          } catch (e) {
+            setError(e);
+          } finally {
+            setLoading(false);
+          }
+        };
+        fetchGallery();
+      }, []);
+
+      if (loading) return <LoadingState message="갤러리 로딩 중..." />;
+      if (error) return <ErrorState error={error} />;
+
+      return (
+        <section className="max-w-7xl mx-auto px-6 lg:px-12 py-16">
+          <div className="mb-12">
+            <div className="text-[10px] tracking-[0.3em] uppercase text-amber-200 mb-3">Recent Archive</div>
+            <h2 className="font-serif-display text-4xl sm:text-5xl text-white">지난 우주의 기록</h2>
+            <p className="mt-3 text-sm text-zinc-400">최근 12일간의 APOD 아카이브를 둘러보세요.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {items.map((item, idx) => (
+              <button
+                key={item.date}
+                onClick={() => onSelectDate(item.date)}
+                className="group text-left animate-fade-in-up"
+                style={{ animationDelay: `${idx * 0.05}s`, opacity: 0 }}
+              >
+                <div className="zoom-hover aspect-[4/5] bg-zinc-900 border border-white/10 mb-4 relative">
+                  {item.media_type === 'image' ? (
+                    <img
+                      src={item.url}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500">
+                      <div className="text-5xl mb-2">▶</div>
+                      <div className="text-[10px] tracking-[0.2em] uppercase">Video Content</div>
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3">
+                    <Badge>{formatDateMagazine(item.date)}</Badge>
+                  </div>
+                </div>
+                <h3 className="font-serif-display text-2xl text-white group-hover:text-amber-200 transition-colors leading-tight mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed">
+                  {item.explanation}
+                </p>
+              </button>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    // ========================================
+    // 📄 Today View
+    // ========================================
+    function TodayView({ currentDate, setCurrentDate }) {
+      const [apod, setApod] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [zoomImage, setZoomImage] = useState(null);
+
+      const fetchApod = useCallback(async (date) => {
+        try {
+          setLoading(true);
+          setError(null);
+          const url = `${APOD_ENDPOINT}?api_key=${NASA_API_KEY}&date=${date}`;
+          const res = await fetch(url);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.msg || `HTTP ${res.status}`);
+          }
+          const data = await res.json();
+          setApod(data);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } catch (e) {
+          setError(e);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        fetchApod(currentDate);
+      }, [currentDate, fetchApod]);
+
+      if (loading) return <LoadingState />;
+      if (error) return <ErrorState error={error} onRetry={() => fetchApod(currentDate)} />;
+      if (!apod) return null;
+
+      return (
+        <>
+          <MagazineHero apod={apod} onImageClick={setZoomImage} />
+          <MagazineArticle apod={apod} />
+          <DateNavigator currentDate={currentDate} onDateChange={setCurrentDate} />
+          <Modal isOpen={!!zoomImage} onClose={() => setZoomImage(null)}>
+            {zoomImage && <img src={zoomImage} alt="Zoomed" className="w-full h-auto" />}
+          </Modal>
+        </>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      const [view, setView] = useState('today'); // 'today' | 'gallery'
+      const [currentDate, setCurrentDate] = useState(formatDate(new Date()));
+
+      const handleSelectDate = (date) => {
+        setCurrentDate(date);
+        setView('today');
+      };
+
+      return (
+        <div className="min-h-screen bg-[#0a0a0f] flex flex-col">
+          <Header
+            onTodayClick={() => setView('today')}
+            onGalleryClick={() => setView('gallery')}
+            activeView={view}
+          />
+          <main className="flex-1">
+            {view === 'today' ? (
+              <TodayView currentDate={currentDate} setCurrentDate={setCurrentDate} />
+            ) : (
+              <GalleryView onSelectDate={handleSelectDate} />
+            )}
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>날씨 검색 — WeatherMap</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #74b9ff 0%, #0984e3 50%, #6c5ce7 100%);
+      min-height: 100vh;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    .fade-in {
+      animation: fadeIn 0.4s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // ========================================
+    // React Hooks
+    // ========================================
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // 🔑 Config
+    // ========================================
+    const API_KEY = '1d5926b624ef458b103acdefc47d5cbc';
+    const API_BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Button({ children, variant = 'primary', size = 'md', disabled, onClick, type = 'button', className = '' }) {
+      const base = 'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 disabled:cursor-not-allowed';
+      const variants = {
+        primary: 'bg-white text-blue-700 hover:bg-blue-50 active:scale-95 shadow-lg',
+        secondary: 'bg-white/20 text-white hover:bg-white/30 active:scale-95',
+        ghost: 'text-white hover:bg-white/10',
+      };
+      const sizes = {
+        sm: 'px-3 py-1.5 text-sm',
+        md: 'px-5 py-2.5 text-base',
+        lg: 'px-6 py-3 text-lg',
+      };
+      return (
+        <button
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ value, onChange, placeholder, disabled, onKeyDown, className = '' }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={`w-full px-5 py-3 rounded-xl bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/25 transition ${className}`}
+        />
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`glass rounded-3xl shadow-2xl p-6 md:p-8 ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    function Spinner() {
+      return (
+        <div className="flex justify-center items-center py-6">
+          <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Weather Components
+    // ========================================
+    function WeatherIcon({ iconCode, description, size = 'lg' }) {
+      if (!iconCode) return null;
+      const sizes = { md: 'w-20 h-20', lg: 'w-32 h-32' };
+      return (
+        <img
+          src={`https://openweathermap.org/img/wn/${iconCode}@4x.png`}
+          alt={description}
+          className={`${sizes[size]} drop-shadow-2xl`}
+        />
+      );
+    }
+
+    function WeatherDetail({ label, value, icon }) {
+      return (
+        <div className="flex flex-col items-center justify-center p-4 bg-white/10 rounded-2xl border border-white/20">
+          <div className="text-2xl mb-1">{icon}</div>
+          <div className="text-white/70 text-xs md:text-sm uppercase tracking-wider">{label}</div>
+          <div className="text-white text-lg md:text-xl font-bold mt-1">{value}</div>
+        </div>
+      );
+    }
+
+    function WeatherDisplay({ data }) {
+      if (!data) return null;
+
+      const temp = Math.round(data.main.temp);
+      const feelsLike = Math.round(data.main.feels_like);
+      const humidity = data.main.humidity;
+      const windSpeed = data.wind?.speed ?? 0;
+      const pressure = data.main.pressure;
+      const tempMin = Math.round(data.main.temp_min);
+      const tempMax = Math.round(data.main.temp_max);
+      const weather = data.weather?.[0];
+      const description = weather?.description ?? '';
+      const iconCode = weather?.icon;
+      const cityName = data.name;
+      const country = data.sys?.country ?? '';
+
+      return (
+        <div className="fade-in space-y-6">
+          {/* 도시 + 아이콘 + 기온 */}
+          <div className="text-center">
+            <h2 className="text-3xl md:text-4xl font-bold text-white drop-shadow-md">
+              {cityName}{country && <span className="text-xl md:text-2xl text-white/80 ml-2">{country}</span>}
+            </h2>
+            <div className="flex items-center justify-center -my-4">
+              <WeatherIcon iconCode={iconCode} description={description} size="lg" />
+            </div>
+            <div className="text-7xl md:text-8xl font-black text-white drop-shadow-lg tracking-tight">
+              {temp}°
+            </div>
+            <div className="text-xl text-white/90 capitalize mt-2">{description}</div>
+            <div className="text-sm text-white/70 mt-1">
+              체감 {feelsLike}° · 최저 {tempMin}° / 최고 {tempMax}°
+            </div>
+          </div>
+
+          {/* 상세 정보 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <WeatherDetail label="습도" value={`${humidity}%`} icon="💧" />
+            <WeatherDetail label="풍속" value={`${windSpeed} m/s`} icon="💨" />
+            <WeatherDetail label="기압" value={`${pressure} hPa`} icon="🌡️" />
+            <WeatherDetail label="체감" value={`${feelsLike}°`} icon="🤗" />
+          </div>
+        </div>
+      );
+    }
+
+    function ErrorMessage({ message }) {
+      return (
+        <div className="fade-in bg-red-500/20 border border-red-300/40 text-white rounded-2xl p-4 text-center">
+          <div className="text-2xl mb-1">⚠️</div>
+          <div className="font-medium">{message}</div>
+        </div>
+      );
+    }
+
+    function EmptyState() {
+      return (
+        <div className="text-center py-10 text-white/80">
+          <div className="text-6xl mb-4">🌤️</div>
+          <p className="text-lg">도시 이름을 입력해 날씨를 확인해보세요</p>
+          <p className="text-sm text-white/60 mt-2">예: Seoul, Tokyo, New York, Paris</p>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 Main Page
+    // ========================================
+    function WeatherPage() {
+      const [city, setCity] = useState('');
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+
+      const fetchWeather = useCallback(async (query) => {
+        const q = query.trim();
+        if (!q) {
+          setError('도시 이름을 입력해주세요.');
+          return;
+        }
+        setLoading(true);
+        setError('');
+        setData(null);
+        try {
+          const url = `${API_BASE_URL}/weather?q=${encodeURIComponent(q)}&appid=${API_KEY}&units=metric&lang=kr`;
+          const res = await fetch(url);
+          if (!res.ok) {
+            if (res.status === 404) throw new Error('해당 도시를 찾을 수 없습니다.');
+            if (res.status === 401) throw new Error('API 키가 유효하지 않습니다.');
+            throw new Error('날씨 정보를 가져오지 못했습니다.');
+          }
+          const json = await res.json();
+          setData(json);
+        } catch (err) {
+          setError(err.message || '오류가 발생했습니다.');
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      // 초기 로딩: 서울 날씨
+      useEffect(() => {
+        fetchWeather('Seoul');
+      }, [fetchWeather]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        fetchWeather(city);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === 'Enter') handleSubmit(e);
+      };
+
+      return (
+        <div className="min-h-screen flex items-start md:items-center justify-center p-4 py-8">
+          <div className="w-full max-w-2xl">
+            <header className="text-center mb-6">
+              <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-lg">
+                🌍 WeatherMap
+              </h1>
+              <p className="text-white/80 mt-2">전 세계 도시의 실시간 날씨</p>
+            </header>
+
+            <Card>
+              <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
+                <Input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="도시 이름 입력 (예: Seoul)"
+                  disabled={loading}
+                />
+                <Button type="submit" disabled={loading}>
+                  검색
+                </Button>
+              </form>
+
+              {loading && <Spinner />}
+              {!loading && error && <ErrorMessage message={error} />}
+              {!loading && !error && data && <WeatherDisplay data={data} />}
+              {!loading && !error && !data && <EmptyState />}
+            </Card>
+
+            <footer className="text-center mt-6 text-white/70 text-sm">
+              Powered by <span className="font-semibold">OpenWeatherMap</span>
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return <WeatherPage />;
+    }
+
+    // ========================================
+    // Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
