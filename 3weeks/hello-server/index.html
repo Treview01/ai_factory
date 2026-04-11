@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포켓몬 도감 · hello-server</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif; }
+    .pokemon-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .pokemon-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.12); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-red-50 via-yellow-50 to-blue-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // ========================================
+    // 📡 API Config
+    // ========================================
+    const API_BASE_URL = '/api';
+
+    // ========================================
+    // 🔗 useFetch Hook
+    // ========================================
+    function useFetch(endpoint) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+
+      useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        fetch(`${API_BASE_URL}${endpoint}`)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then((json) => { if (!cancelled) setData(json); })
+          .catch((err) => { if (!cancelled) setError(err.message || '불러오기 실패'); })
+          .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+      }, [endpoint]);
+
+      return { data, loading, error };
+    }
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+    function Input({ value, onChange, placeholder, className = '' }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className={`w-full px-5 py-3 rounded-full border-2 border-gray-200 focus:border-red-400 focus:outline-none bg-white shadow-sm text-base ${className}`}
+        />
+      );
+    }
+
+    function Badge({ children, color = 'normal' }) {
+      const colors = {
+        grass:    'bg-green-100 text-green-700 border-green-200',
+        fire:     'bg-red-100 text-red-700 border-red-200',
+        water:    'bg-blue-100 text-blue-700 border-blue-200',
+        electric: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        psychic:  'bg-pink-100 text-pink-700 border-pink-200',
+        poison:   'bg-purple-100 text-purple-700 border-purple-200',
+        flying:   'bg-sky-100 text-sky-700 border-sky-200',
+        normal:   'bg-gray-100 text-gray-700 border-gray-200',
+      };
+      return (
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${colors[color] || colors.normal}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-3xl shadow-md p-6 pokemon-card ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🧩 Pokemon Card
+    // ========================================
+    function PokemonCard({ pokemon }) {
+      return (
+        <Card>
+          <div className={`rounded-2xl bg-gradient-to-br ${pokemon.bg} p-4 mb-4 aspect-square flex items-center justify-center`}>
+            {pokemon.imageUrl ? (
+              <img
+                src={pokemon.imageUrl}
+                alt={pokemon.name}
+                className="w-full h-full object-contain drop-shadow-xl"
+                loading="lazy"
+              />
+            ) : (
+              <div className="text-5xl text-gray-300">?</div>
+            )}
+          </div>
+          <div className="flex items-start justify-between mb-2">
+            <div>
+              <p className="text-xs text-gray-400 font-mono">No. {String(pokemon.id).padStart(3, '0')}</p>
+              <h3 className="text-xl font-bold text-gray-800">{pokemon.name}</h3>
+              <p className="text-xs text-gray-500">{pokemon.nameEn}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-3">
+            {pokemon.types.map((t) => (
+              <Badge key={t.label} color={t.color}>{t.label}</Badge>
+            ))}
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed mb-3">{pokemon.description}</p>
+          <div className="flex justify-between text-xs text-gray-500 border-t pt-3">
+            <span>키 <strong className="text-gray-700">{pokemon.height}</strong></span>
+            <span>몸무게 <strong className="text-gray-700">{pokemon.weight}</strong></span>
+          </div>
+        </Card>
+      );
+    }
+
+    // ========================================
+    // 📄 Home Page
+    // ========================================
+    function HomePage() {
+      const { data, loading, error } = useFetch('/pokemons');
+      const [query, setQuery] = useState('');
+
+      const pokemons = data?.pokemons || [];
+
+      const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return pokemons;
+        return pokemons.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.nameEn.toLowerCase().includes(q) ||
+            p.types.some((t) => t.label.toLowerCase().includes(q)) ||
+            String(p.id).includes(q)
+        );
+      }, [query, pokemons]);
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          {/* Header */}
+          <header className="text-center mb-10">
+            <h1 className="text-4xl md:text-5xl font-black text-gray-800 mb-2">
+              포켓몬 <span className="text-red-500">도감</span>
+            </h1>
+            <p className="text-gray-500">
+              <code className="px-2 py-0.5 bg-white/70 rounded text-xs">GET /api/pokemons</code> 에서 데이터를 가져옵니다
+            </p>
+          </header>
+
+          {/* Search */}
+          <div className="max-w-xl mx-auto mb-10">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="🔍  포켓몬을 검색해보세요 (예: 피카츄, 불꽃, 25)"
+            />
+          </div>
+
+          {/* Loading / Error / Empty / Results */}
+          {loading ? (
+            <div className="text-center py-20 text-gray-500">
+              <div className="inline-block w-10 h-10 border-4 border-red-300 border-t-red-500 rounded-full spin mb-3"></div>
+              <p>서버에서 불러오는 중...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">⚠️</div>
+              <p className="text-red-500 font-semibold">불러오기 실패: {error}</p>
+              <p className="text-gray-500 text-sm mt-2">서버가 실행 중인지 확인해주세요 (node server.js)</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <p className="text-5xl mb-3">🔍</p>
+              <p>검색 결과가 없습니다</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((p) => (
+                <PokemonCard key={p.id} pokemon={p} />
+              ))}
+            </div>
+          )}
+
+          <footer className="text-center mt-12 text-xs text-gray-400">
+            총 {pokemons.length}마리의 포켓몬 · 데이터: hello-server
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+    function App() {
+      return <HomePage />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
