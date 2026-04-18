@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Midjourney — AI Image Generator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            dark: { 800: '#0f0f1a', 700: '#161625', 600: '#1e1e32', 500: '#2a2a44' },
+            brand: { 400: '#a78bfa', 500: '#8b5cf6', 600: '#7c3aed' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f0f1a; color: #e2e8f0; }
+    @keyframes shimmer {
+      0% { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #1e1e32 25%, #2a2a44 50%, #1e1e32 75%);
+      background-size: 400px 100%;
+      animation: shimmer 1.8s infinite linear;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.4s ease-out; }
+    .gradient-text {
+      background: linear-gradient(135deg, #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // ========================================
+    // 🎨 미리 정해둔 이미지 스타일 (화풍/분위기)
+    // ========================================
+
+    const FIXED_STYLE = {
+      name: 'Studio Ghibli Style',
+      description: '스튜디오 지브리 감성의 따뜻한 애니메이션 스타일',
+      suffix: ', Studio Ghibli style, anime, hand-drawn, warm colors, detailed background, Hayao Miyazaki'
+    };
+
+    // ========================================
+    // 🧩 랜덤 프롬프트
+    // ========================================
+
+    const SIZE_OPTIONS = [
+      { id: '1:1', label: '1:1', desc: '정사각형' },
+      { id: '16:9', label: '16:9', desc: '와이드' },
+      { id: '9:16', label: '9:16', desc: '세로' },
+      { id: '4:3', label: '4:3', desc: '가로' },
+      { id: '3:4', label: '3:4', desc: '세로(4:3)' },
+    ];
+
+    const RESOLUTION_OPTIONS = [
+      { id: 'sd', label: 'SD', desc: '512px', base: 512 },
+      { id: 'hd', label: 'HD', desc: '1024px', base: 1024 },
+      { id: 'fhd', label: 'FHD', desc: '1920px', base: 1920 },
+    ];
+
+    // 비율 + 해상도로 실제 width/height 계산
+    function calcDimensions(ratioId, resId) {
+      const res = RESOLUTION_OPTIONS.find(r => r.id === resId) || RESOLUTION_OPTIONS[1];
+      const base = res.base;
+      const ratios = {
+        '1:1': [1, 1],
+        '16:9': [16, 9],
+        '9:16': [9, 16],
+        '4:3': [4, 3],
+        '3:4': [3, 4],
+      };
+      const [rw, rh] = ratios[ratioId] || [1, 1];
+      if (rw >= rh) {
+        return { w: base, h: Math.round(base * rh / rw) };
+      } else {
+        return { w: Math.round(base * rw / rh), h: base };
+      }
+    }
+
+    const RANDOM_PROMPTS = [
+      'A small lighthouse under a sky full of falling stars',
+      'A cat walking on clouds at sunset',
+      'A forest path filled with purple trees and fireflies',
+      'A tiny island village floating on the sea',
+      'A cup of coffee by a rainy cafe window',
+      'Cherry blossoms falling on a train station platform',
+      'A girl playing piano under the moonlight',
+      'A whale flying through the sky with a small boat',
+    ];
+
+    // ========================================
+    // 🎨 Design System
+    // ========================================
+
+    function Button({ children, variant = 'primary', disabled, onClick, className = '' }) {
+      const styles = {
+        primary: 'bg-gradient-to-r from-brand-600 to-pink-600 hover:from-brand-500 hover:to-pink-500 text-white shadow-lg shadow-brand-600/25 active:scale-[0.97]',
+        ghost: 'hover:bg-white/5 text-gray-400 hover:text-gray-200',
+      };
+      return (
+        <button
+          className={`inline-flex items-center justify-center gap-2 font-medium rounded-xl px-5 py-2.5 text-sm transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${styles[variant]} ${className}`}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </button>
+      );
+    }
+
+    function Toast({ message, type = 'error', onClose }) {
+      useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t); }, []);
+      const color = type === 'error' ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-green-500/20 border-green-500/40 text-green-300';
+      return (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl border ${color} shadow-lg fade-up text-sm max-w-sm`}>
+          {message}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 이미지 카드
+    // ========================================
+
+    function ImageCard({ item }) {
+      const [loaded, setLoaded] = useState(false);
+      return (
+        <div className="rounded-2xl overflow-hidden border border-white/5 hover:border-brand-500/30 transition-all duration-300 fade-up bg-dark-700">
+          <div className={`relative ${!loaded ? 'shimmer aspect-square' : 'bg-dark-600'}`}>
+            <img
+              src={item.url}
+              alt={item.prompt}
+              className={`w-full h-auto transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setLoaded(true)}
+            />
+          </div>
+          <div className="p-3">
+            <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{item.prompt}</p>
+            {item.englishPrompt && (
+              <p className="text-[10px] text-gray-500 mt-1 line-clamp-1 italic">→ {item.englishPrompt}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="text-[10px] text-brand-400">{FIXED_STYLE.name}</span>
+              <span className="text-[10px] text-gray-500">• {item.size} • {item.dimensions}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 📄 로딩 플레이스홀더
+    // ========================================
+
+    function LoadingCard() {
+      return (
+        <div className="rounded-2xl overflow-hidden border border-brand-500/20 fade-up">
+          <div className="aspect-square shimmer flex items-center justify-center">
+            <div className="text-center">
+              <svg className="w-8 h-8 text-brand-400/40 mx-auto animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+              <p className="text-xs text-gray-500 mt-3">이미지 생성 중...</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+
+    function App() {
+      const [prompt, setPrompt] = useState('');
+      const [size, setSize] = useState('1:1');
+      const [resolution, setResolution] = useState('hd');
+      const [images, setImages] = useState([]);
+      const [generating, setGenerating] = useState(false);
+      const [toast, setToast] = useState(null);
+      const textareaRef = useRef(null);
+
+      const showToast = (message, type = 'error') => setToast({ message, type });
+
+      const surpriseMe = () => {
+        setPrompt(RANDOM_PROMPTS[Math.floor(Math.random() * RANDOM_PROMPTS.length)]);
+        textareaRef.current?.focus();
+      };
+
+      // ── 한글→영어 프롬프트 변환 ──
+      async function translatePrompt(korean) {
+        try {
+          const systemMsg = 'Translate the Korean text to an English image generation prompt. Be literal and exact. Include EVERY object, action, and detail mentioned. Output ONLY the translated prompt.';
+          const url = `https://text.pollinations.ai/${encodeURIComponent('Translate to English image prompt: ' + korean)}?system=${encodeURIComponent(systemMsg)}&model=openai&noMarkdown=true`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('번역 실패');
+          const text = await res.text();
+          console.log('번역 결과:', text.trim());
+          return text.trim();
+        } catch {
+          return korean;
+        }
+      }
+
+      // ── 이미지 생성 (Pollinations.ai — 무료, 키 불필요) ──
+      const generate = useCallback(async () => {
+        if (!prompt.trim()) { showToast('프롬프트를 입력해주세요.'); return; }
+
+        setGenerating(true);
+
+        try {
+          // 1단계: 한글이면 영어로 변환
+          const hasKorean = /[가-힣]/.test(prompt);
+          const englishPrompt = hasKorean ? await translatePrompt(prompt.trim()) : prompt.trim();
+
+          // 2단계: 변환된 프롬프트 + 고정 스타일로 이미지 생성
+          const fullPrompt = englishPrompt + FIXED_STYLE.suffix;
+          const seed = Math.floor(Math.random() * 999999);
+          const dim = calcDimensions(size, resolution);
+          const resLabel = RESOLUTION_OPTIONS.find(r => r.id === resolution)?.label || 'HD';
+          const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=${dim.w}&height=${dim.h}&seed=${seed}&nologo=true&model=flux`;
+
+          // 이미지가 실제로 로드되는지 확인
+          await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = resolve;
+            img.onerror = () => reject(new Error('이미지 생성에 실패했습니다.'));
+            img.src = imageUrl;
+          });
+
+          const newImage = {
+            id: `${Date.now()}`,
+            url: imageUrl,
+            prompt: prompt.trim(),
+            englishPrompt: hasKorean ? englishPrompt : null,
+            seed,
+            size: size,
+            resolution: resLabel,
+            dimensions: `${dim.w}×${dim.h}`,
+          };
+
+          setImages(prev => [newImage, ...prev]);
+          showToast('이미지 생성 완료!', 'success');
+        } catch (err) {
+          showToast(err.message);
+        } finally {
+          setGenerating(false);
+        }
+      }, [prompt, size, resolution]);
+
+      // ⌘+Enter 단축키
+      useEffect(() => {
+        const handler = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !generating) {
+            e.preventDefault();
+            generate();
+          }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, [generate, generating]);
+
+      return (
+        <div className="min-h-screen">
+          {/* 헤더 */}
+          <header className="sticky top-0 z-30 border-b border-white/5 bg-dark-800/80 backdrop-blur-xl">
+            <div className="max-w-3xl mx-auto px-5 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold">M</div>
+                <h1 className="text-base font-bold gradient-text">My Midjourney</h1>
+              </div>
+              <span className="text-xs text-gray-500">{images.length}개 생성됨</span>
+            </div>
+          </header>
+
+          {/* 메인 */}
+          <main className="max-w-3xl mx-auto px-5 py-8 space-y-8">
+
+            {/* 고정 스타일 + 비율 선택 */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-brand-500/10 border border-brand-500/20 flex-1">
+                <span className="text-lg">🎨</span>
+                <div>
+                  <p className="text-sm font-medium text-brand-400">{FIXED_STYLE.name}</p>
+                  <p className="text-xs text-gray-400">{FIXED_STYLE.description}</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {/* 비율 */}
+                <div className="flex gap-1.5 items-center px-2 py-2 rounded-xl bg-dark-700 border border-white/5">
+                  {SIZE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setSize(opt.id)}
+                      className={`flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] transition-all ${
+                        size === opt.id
+                          ? 'bg-brand-600/30 text-brand-300 border border-brand-500/40'
+                          : 'text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      <span className="font-semibold">{opt.label}</span>
+                      <span className="text-[9px] opacity-60">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                {/* 해상도 */}
+                <div className="flex gap-1.5 items-center px-2 py-2 rounded-xl bg-dark-700 border border-white/5">
+                  <span className="text-[10px] text-gray-500 px-1">해상도</span>
+                  {RESOLUTION_OPTIONS.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setResolution(opt.id)}
+                      className={`flex flex-col items-center px-3 py-1.5 rounded-lg text-[11px] transition-all ${
+                        resolution === opt.id
+                          ? 'bg-brand-600/30 text-brand-300 border border-brand-500/40'
+                          : 'text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      <span className="font-semibold">{opt.label}</span>
+                      <span className="text-[9px] opacity-60">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 프롬프트 입력 */}
+            <div className="rounded-2xl border border-white/10 bg-dark-700 p-4 space-y-3">
+              <textarea
+                ref={textareaRef}
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                placeholder="영어로 입력하면 더 정확해요! (예: A cute rabbit holding a hammer, looking at a MacBook)"
+                rows={3}
+                className="w-full bg-transparent text-gray-200 placeholder-gray-500 resize-none focus:outline-none text-sm leading-relaxed"
+              />
+              <div className="flex items-center justify-between">
+                <Button variant="ghost" onClick={surpriseMe} className="px-3 py-1.5 text-xs">
+                  🎲 랜덤 프롬프트
+                </Button>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-gray-600 hidden sm:block">⌘+Enter</span>
+                  <Button
+                    variant="primary"
+                    disabled={generating || !prompt.trim()}
+                    onClick={generate}
+                  >
+                    {generating ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                        </svg>
+                        생성 중...
+                      </>
+                    ) : '생성하기'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* 갤러리 */}
+            {(generating || images.length > 0) ? (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-300 mb-4">생성된 이미지</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {generating && <LoadingCard />}
+                  {images.map(img => <ImageCard key={img.id} item={img} />)}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center mx-auto mb-5">
+                  <svg className="w-8 h-8 text-brand-400/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-gray-300 font-medium mb-1">상상을 이미지로</p>
+                <p className="text-sm text-gray-500 mb-4">프롬프트를 입력하면 '{FIXED_STYLE.name}' 스타일로 이미지를 생성합니다.</p>
+                <Button variant="ghost" onClick={surpriseMe}>🎲 랜덤 프롬프트로 시작</Button>
+              </div>
+            )}
+          </main>
+
+          {/* Toast */}
+          {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🎬 Rendering
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
