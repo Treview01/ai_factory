@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo LocalStorage</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ========================================
+    // 🎨 Design System
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', onClick, className = '' }) {
+      const base = 'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1';
+      const v = {
+        primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-400',
+        ghost: 'text-gray-500 hover:bg-gray-100 focus:ring-gray-300',
+      };
+      const s = { sm: 'px-2.5 py-1 text-xs', md: 'px-4 py-2 text-sm' };
+      return <button onClick={onClick} className={`${base} ${v[variant]} ${s[size]} ${className}`}>{children}</button>;
+    }
+
+    // ========================================
+    // 📋 TodoItem
+    // ========================================
+
+    function TodoItem({ todo, onToggle, onDelete, onEdit }) {
+      const [editing, setEditing] = useState(false);
+      const [draft, setDraft] = useState(todo.text);
+
+      const save = () => {
+        if (draft.trim() && draft.trim() !== todo.text) onEdit(todo.id, draft.trim());
+        setEditing(false);
+      };
+
+      return (
+        <div className={`group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${todo.done ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-200'}`}>
+          <button onClick={() => onToggle(todo.id)}
+            className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${todo.done ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300 hover:border-indigo-400'}`}>
+            {todo.done && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+          </button>
+
+          {editing ? (
+            <form onSubmit={e => { e.preventDefault(); save(); }} className="flex-1 flex gap-2">
+              <input value={draft} onChange={e => setDraft(e.target.value)} autoFocus
+                className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <Button size="sm" onClick={save}>저장</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setDraft(todo.text); }}>취소</Button>
+            </form>
+          ) : (
+            <>
+              <span className={`flex-1 text-sm ${todo.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{todo.text}</span>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="sm" variant="ghost" onClick={() => { setDraft(todo.text); setEditing(true); }}>✏️</Button>
+                <Button size="sm" variant="ghost" onClick={() => onDelete(todo.id)}>🗑</Button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+
+    const STORAGE_KEY = 'todos_localstorage';
+
+    function App() {
+      const [todos, setTodos] = useState(() => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        return saved ? JSON.parse(saved) : [
+          { id: 1, text: '장보기 - 우유, 계란, 빵 사기', done: false },
+          { id: 2, text: '운동하기 - 헬스장 30분 러닝', done: false },
+          { id: 3, text: '책 읽기 - 클린 코드 3장 정리', done: true },
+          { id: 4, text: '이메일 확인 - 매일 답장', done: false },
+          { id: 5, text: '코드 리뷰 - PR #42 리뷰 완료하기', done: false },
+        ];
+      });
+      const [input, setInput] = useState('');
+      const [filter, setFilter] = useState('all');
+
+      useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(todos)); }, [todos]);
+
+      const addTodo = () => {
+        if (!input.trim()) return;
+        setTodos(p => [...p, { id: Date.now(), text: input.trim(), done: false }]);
+        setInput('');
+      };
+
+      const toggleTodo = (id) => setTodos(p => p.map(t => t.id === id ? { ...t, done: !t.done } : t));
+      const editTodo = (id, text) => setTodos(p => p.map(t => t.id === id ? { ...t, text } : t));
+      const deleteTodo = (id) => setTodos(p => p.filter(t => t.id !== id));
+
+      const doneCount = todos.filter(t => t.done).length;
+      const filtered = todos.filter(t => filter === 'all' ? true : filter === 'active' ? !t.done : t.done);
+
+      return (
+        <div className="max-w-lg mx-auto px-4 py-10">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">Todo LocalStorage</h1>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="w-2 h-2 rounded-full bg-green-400"></span>
+              <span className="text-xs text-gray-400">브라우저 저장 (서버 불필요)</span>
+            </div>
+          </div>
+
+          {/* 진행률 */}
+          <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">{doneCount}/{todos.length} 완료</span>
+              <span className="text-sm font-bold text-indigo-600">{todos.length > 0 ? Math.round(doneCount / todos.length * 100) : 0}%</span>
+            </div>
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                style={{ width: `${todos.length > 0 ? (doneCount / todos.length * 100) : 0}%` }}></div>
+            </div>
+            <div className="flex gap-1 mt-3">
+              {todos.map((t, i) => (
+                <div key={t.id} className={`flex-1 h-1.5 rounded-full transition-colors ${t.done ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                  title={`${i+1}/${todos.length} ${t.text} ${t.done ? '✓' : ''}`}></div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 mb-5">
+            <input value={input} onChange={e => setInput(e.target.value)} placeholder="새 할 일 입력..."
+              onKeyDown={e => e.key === 'Enter' && addTodo()}
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            <Button onClick={addTodo}>추가</Button>
+          </div>
+
+          <div className="flex gap-2 mb-4">
+            {[['all','전체',todos.length],['active','진행중',todos.length-doneCount],['done','완료',doneCount]].map(([key,label,count]) => (
+              <button key={key} onClick={() => setFilter(key)}
+                className={`px-3 py-1.5 text-xs rounded-lg transition ${filter === key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border hover:bg-gray-50'}`}>
+                {label} {count}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            {filtered.length === 0 ? (
+              <div className="text-center py-16 text-gray-300">
+                <p className="text-3xl mb-2">✨</p>
+                <p className="text-sm">할 일이 없습니다</p>
+              </div>
+            ) : filtered.map(todo => (
+              <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} onEdit={editTodo} />
+            ))}
+          </div>
+
+          {doneCount > 0 && (
+            <div className="mt-6 text-center">
+              <Button variant="ghost" size="sm" onClick={() => setTodos(p => p.filter(t => !t.done))}>
+                완료 항목 삭제 ({doneCount})
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔄 Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

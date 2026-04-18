@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memo App — PostgreSQL</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    .memo-card { transition: all 0.2s ease; }
+    .memo-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+    .pin-btn { transition: transform 0.2s; }
+    .pin-btn:hover { transform: scale(1.2); }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    // ========================================
+    // API Layer
+    // ========================================
+    const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? `http://${window.location.hostname}:3000/api` : '/api';
+
+    async function api(endpoint, options = {}) {
+      const res = await fetch(`${API}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    const memoApi = {
+      getAll:  (q)          => api(`/memos${q ? '?q=' + encodeURIComponent(q) : ''}`),
+      get:     (id)         => api(`/memos/${id}`),
+      create:  (data)       => api('/memos', { method: 'POST', body: data }),
+      update:  (id, data)   => api(`/memos/${id}`, { method: 'PUT', body: data }),
+      delete:  (id)         => api(`/memos/${id}`, { method: 'DELETE' }),
+    };
+
+    // ========================================
+    // Color Palette
+    // ========================================
+    const COLORS = [
+      { value: '#ffffff', label: '흰색' },
+      { value: '#fff3cd', label: '노랑' },
+      { value: '#d1ecf1', label: '파랑' },
+      { value: '#d4edda', label: '초록' },
+      { value: '#e2d9f3', label: '보라' },
+      { value: '#fde2e2', label: '빨강' },
+      { value: '#fce4ec', label: '핑크' },
+      { value: '#e8f5e9', label: '민트' },
+    ];
+
+    // ========================================
+    // MemoCard
+    // ========================================
+    function MemoCard({ memo, onSelect, onPin, onDelete, onToggleDone }) {
+      const lines = (memo.content || '').split('\n');
+      const preview = lines.slice(0, 4).join('\n') + (lines.length > 4 ? '\n...' : '');
+
+      return (
+        <div className={`memo-card fade-in rounded-2xl border border-gray-200 p-4 cursor-pointer relative group ${memo.done ? 'opacity-60' : ''}`}
+          style={{ backgroundColor: memo.color || '#ffffff' }}
+          onClick={() => onSelect(memo)}>
+
+          {/* 완료 체크 */}
+          <button className="absolute top-3 left-3 z-10"
+            onClick={e => { e.stopPropagation(); onToggleDone(memo.id, !memo.done); }}>
+            <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition text-xs
+              ${memo.done ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-gray-300 hover:border-indigo-400'}`}>
+              {memo.done && '✓'}
+            </span>
+          </button>
+
+          {/* 핀 버튼 */}
+          <button className="pin-btn absolute top-3 right-3 opacity-0 group-hover:opacity-100"
+            onClick={e => { e.stopPropagation(); onPin(memo.id, !memo.pinned); }}
+            title={memo.pinned ? '고정 해제' : '고정'}>
+            <span className={`text-lg ${memo.pinned ? 'text-yellow-500' : 'text-gray-300'}`}>
+              {memo.pinned ? '📌' : '📍'}
+            </span>
+          </button>
+
+          {/* 삭제 버튼 */}
+          <button className="absolute top-3 right-10 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition"
+            onClick={e => { e.stopPropagation(); onDelete(memo.id); }}>
+            🗑
+          </button>
+
+          <div className="pl-7">
+            {memo.pinned && <span className="text-yellow-500 text-xs mb-1 block">📌 고정됨</span>}
+            <h3 className={`font-semibold text-sm mb-2 pr-16 truncate ${memo.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{memo.title}</h3>
+            <p className="text-xs text-gray-600 whitespace-pre-wrap line-clamp-4">{preview}</p>
+            <p className="text-[10px] text-gray-400 mt-3">
+              {new Date(memo.updated_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // MemoEditor
+    // ========================================
+    function MemoEditor({ memo, onSave, onClose, onDelete }) {
+      const [title, setTitle] = useState(memo ? memo.title : '');
+      const [content, setContent] = useState(memo ? memo.content || '' : '');
+      const [color, setColor] = useState(memo ? memo.color || '#ffffff' : '#ffffff');
+      const titleRef = useRef(null);
+
+      useEffect(() => { if (!memo && titleRef.current) titleRef.current.focus(); }, [memo]);
+
+      const handleSave = () => {
+        if (!title.trim()) return;
+        onSave({ title: title.trim(), content: content.trim(), color }, memo?.id);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col fade-in"
+            style={{ backgroundColor: color }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-2">
+              <span className="text-xs text-gray-400">{memo ? '메모 수정' : '새 메모'}</span>
+              <div className="flex gap-1">
+                {memo && (
+                  <button onClick={() => { onDelete(memo.id); onClose(); }}
+                    className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition">삭제</button>
+                )}
+                <button onClick={onClose}
+                  className="text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100 transition text-sm">✕</button>
+              </div>
+            </div>
+
+            {/* 제목 */}
+            <input ref={titleRef} value={title} onChange={e => setTitle(e.target.value)} placeholder="제목"
+              className="mx-5 mb-2 px-0 py-2 bg-transparent border-b border-gray-200 text-lg font-semibold text-gray-800 focus:outline-none focus:border-indigo-400 placeholder-gray-300" />
+
+            {/* 내용 */}
+            <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="내용을 입력하세요..."
+              className="flex-1 mx-5 mb-3 px-0 py-2 bg-transparent text-sm text-gray-700 focus:outline-none resize-none placeholder-gray-300"
+              rows={10} />
+
+            {/* 색상 선택 */}
+            <div className="px-5 pb-3 flex items-center gap-2">
+              <span className="text-xs text-gray-400 mr-1">색상</span>
+              {COLORS.map(c => (
+                <button key={c.value} onClick={() => setColor(c.value)}
+                  className={`w-6 h-6 rounded-full border-2 transition ${color === c.value ? 'border-indigo-500 scale-110' : 'border-gray-200 hover:border-gray-400'}`}
+                  style={{ backgroundColor: c.value }} title={c.label} />
+              ))}
+            </div>
+
+            {/* 저장 */}
+            <div className="px-5 pb-5">
+              <button onClick={handleSave} disabled={!title.trim()}
+                className={`w-full py-2.5 rounded-xl text-sm font-medium transition ${title.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}>
+                {memo ? '수정 완료' : '메모 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========================================
+    // App
+    // ========================================
+    function App() {
+      const [memos, setMemos] = useState([]);
+      const [search, setSearch] = useState('');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [editing, setEditing] = useState(null);   // null | 'new' | memo object
+      const searchTimeout = useRef(null);
+
+      const fetchMemos = useCallback(async (q) => {
+        try {
+          const data = await memoApi.getAll(q);
+          setMemos(data);
+          setError(null);
+        } catch (e) {
+          setError(e.message);
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => { fetchMemos(); }, [fetchMemos]);
+
+      const handleSearch = (value) => {
+        setSearch(value);
+        clearTimeout(searchTimeout.current);
+        searchTimeout.current = setTimeout(() => fetchMemos(value), 300);
+      };
+
+      const saveMemo = async (data, id) => {
+        try {
+          if (id) {
+            const updated = await memoApi.update(id, data);
+            setMemos(p => p.map(m => m.id === id ? updated : m));
+          } else {
+            const created = await memoApi.create(data);
+            setMemos(p => [created, ...p]);
+          }
+          setEditing(null);
+        } catch (e) {
+          alert('저장 실패: ' + e.message);
+        }
+      };
+
+      const pinMemo = async (id, pinned) => {
+        try {
+          const updated = await memoApi.update(id, { pinned });
+          setMemos(p => {
+            const list = p.map(m => m.id === id ? updated : m);
+            return list.sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updated_at) - new Date(a.updated_at)));
+          });
+        } catch (e) {
+          console.error('pin failed:', e);
+        }
+      };
+
+      const deleteMemo = async (id) => {
+        try {
+          await memoApi.delete(id);
+          setMemos(p => p.filter(m => m.id !== id));
+        } catch (e) {
+          console.error('delete failed:', e);
+        }
+      };
+
+      const toggleDone = async (id, done) => {
+        try {
+          const updated = await memoApi.update(id, { done });
+          setMemos(p => p.map(m => m.id === id ? updated : m));
+        } catch (e) {
+          console.error('toggle failed:', e);
+        }
+      };
+
+      const doneCount = memos.filter(m => m.done).length;
+      const pinnedMemos = memos.filter(m => m.pinned);
+      const otherMemos = memos.filter(m => !m.pinned);
+
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Memo</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`w-2 h-2 rounded-full ${error ? 'bg-yellow-400' : 'bg-green-400'}`}></span>
+                <span className="text-xs text-gray-400">{error ? '연결 실패' : 'PostgreSQL 연결됨'} · {memos.length}개</span>
+              </div>
+            </div>
+            <button onClick={() => setEditing('new')}
+              className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">
+              + 새 메모
+            </button>
+          </div>
+
+          {/* 검색 */}
+          <div className="mb-6">
+            <input value={search} onChange={e => handleSearch(e.target.value)} placeholder="메모 검색..."
+              className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent shadow-sm" />
+          </div>
+
+          {/* 진행률 */}
+          {memos.length > 0 && (
+            <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">{doneCount}/{memos.length} 완료</span>
+                <span className="text-sm font-bold text-indigo-600">{Math.round(doneCount / memos.length * 100)}%</span>
+              </div>
+              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                  style={{ width: `${doneCount / memos.length * 100}%` }}></div>
+              </div>
+              <div className="flex gap-1 mt-3">
+                {memos.map((m, i) => (
+                  <div key={m.id} className={`flex-1 h-1.5 rounded-full transition-colors ${m.done ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                    title={`${i+1}. ${m.title} ${m.done ? '✓' : ''}`}></div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
+              API 연결 실패: {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="text-center py-20 text-gray-400 text-sm">불러오는 중...</div>
+          ) : memos.length === 0 ? (
+            <div className="text-center py-20 text-gray-300">
+              <p className="text-4xl mb-3">📝</p>
+              <p className="text-sm">{search ? '검색 결과가 없습니다' : '메모가 없습니다'}</p>
+              <button onClick={() => setEditing('new')} className="mt-4 text-indigo-500 text-sm hover:underline">
+                첫 메모를 작성해보세요
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* 고정된 메모 */}
+              {pinnedMemos.length > 0 && (
+                <div className="mb-6">
+                  <p className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">📌 고정됨</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {pinnedMemos.map(m => (
+                      <MemoCard key={m.id} memo={m} onSelect={setEditing} onPin={pinMemo} onDelete={deleteMemo} onToggleDone={toggleDone} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 나머지 메모 */}
+              {otherMemos.length > 0 && (
+                <div>
+                  {pinnedMemos.length > 0 && <p className="text-xs font-medium text-gray-400 mb-3 uppercase tracking-wider">기타</p>}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {otherMemos.map(m => (
+                      <MemoCard key={m.id} memo={m} onSelect={setEditing} onPin={pinMemo} onDelete={deleteMemo} onToggleDone={toggleDone} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 에디터 모달 */}
+          {editing && (
+            <MemoEditor
+              memo={editing === 'new' ? null : editing}
+              onSave={saveMemo}
+              onClose={() => setEditing(null)}
+              onDelete={deleteMemo}
+            />
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

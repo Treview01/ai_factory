@@ -20,19 +20,20 @@ function getTxtFiles() {
 
 function fileToTodo(filename) {
   const filepath = path.join(TODOS_DIR, filename);
-  const content = fs.readFileSync(filepath, 'utf-8').trim();
+  const raw = fs.readFileSync(filepath, 'utf-8').trim();
   const id = path.basename(filename, '.txt');
-  // 첫 줄이 내용, 두번째 줄이 done 상태
-  const lines = content.split('\n');
+  // 첫 줄: text, 두번째 줄: done 상태, 세번째 줄~: content
+  const lines = raw.split('\n');
   const text = lines[0] || id;
   const done = lines[1] === 'done';
-  return { id, text, done };
+  const content = lines.slice(2).join('\n') || '';
+  return { id, text, done, content };
 }
 
 function saveTodo(todo) {
   const filepath = path.join(TODOS_DIR, `${todo.id}.txt`);
-  const content = `${todo.text}\n${todo.done ? 'done' : 'active'}`;
-  fs.writeFileSync(filepath, content, 'utf-8');
+  const data = `${todo.text}\n${todo.done ? 'done' : 'active'}\n${todo.content || ''}`;
+  fs.writeFileSync(filepath, data, 'utf-8');
 }
 
 // ── API Routes ──
@@ -62,7 +63,7 @@ app.post('/api/todos', (req, res) => {
     while (fs.existsSync(path.join(TODOS_DIR, `${finalId}.txt`))) {
       finalId = `${id}_${counter++}`;
     }
-    const todo = { id: finalId, text: text.trim(), done: false };
+    const todo = { id: finalId, text: text.trim(), done: false, content: (req.body.content || '').trim() };
     saveTodo(todo);
     res.status(201).json(todo);
   } catch (err) {
@@ -85,6 +86,7 @@ app.put('/api/todos/:id', (req, res) => {
       id,
       text: req.body.text !== undefined ? req.body.text : existing.text,
       done: req.body.done !== undefined ? req.body.done : existing.done,
+      content: req.body.content !== undefined ? req.body.content : existing.content,
     };
     saveTodo(updated);
     res.json(updated);

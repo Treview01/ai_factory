@@ -48,7 +48,7 @@ app.post('/api/todos', (req, res) => {
     }
     const todos = readTodos();
     const id = `todo_${Date.now()}`;
-    const todo = { id, text: text.trim(), done: false };
+    const todo = { id, text: text.trim(), done: false, content: (req.body.content || '').trim() };
     todos.push(todo);
     writeTodos(todos);
     res.status(201).json(todo);
@@ -67,6 +67,7 @@ app.put('/api/todos/:id', (req, res) => {
     }
     if (req.body.text !== undefined) todos[idx].text = req.body.text;
     if (req.body.done !== undefined) todos[idx].done = req.body.done;
+    if (req.body.content !== undefined) todos[idx].content = req.body.content;
     writeTodos(todos);
     res.json(todos[idx]);
   } catch (err) {

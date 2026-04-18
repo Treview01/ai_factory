@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo PostgreSQL API</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // API Layer
+    // ========================================
+
+    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? `http://${window.location.hostname}:3000/api`
+      : '/api';
+
+    async function api(endpoint, options = {}) {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    const todoApi = {
+      getAll:  ()          => api('/todos'),
+      create:  (text, content) => api('/todos', { method: 'POST', body: { text, content } }),
+      update:  (id, data)  => api(`/todos/${id}`, { method: 'PUT', body: data }),
+      delete:  (id)        => api(`/todos/${id}`, { method: 'DELETE' }),
+    };
+
+    // ========================================
+    // Design System
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', onClick, className = '' }) {
+      const base = 'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1';
+      const v = {
+        primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-400',
+        ghost: 'text-gray-500 hover:bg-gray-100 focus:ring-gray-300',
+      };
+      const s = { sm: 'px-2.5 py-1 text-xs', md: 'px-4 py-2 text-sm' };
+      return <button onClick={onClick} className={`${base} ${v[variant]} ${s[size]} ${className}`}>{children}</button>;
+    }
+
+    // ========================================
+    // TodoItem
+    // ========================================
+
+    function TodoItem({ todo, onToggle, onDelete, onEdit }) {
+      const [editing, setEditing] = useState(false);
+      const [draft, setDraft] = useState(todo.text);
+      const [draftContent, setDraftContent] = useState(todo.content || '');
+      const [expanded, setExpanded] = useState(false);
+
+      const save = () => {
+        const changes = {};
+        if (draft.trim() !== todo.text) changes.text = draft.trim();
+        if (draftContent.trim() !== (todo.content || '')) changes.content = draftContent.trim();
+        if (Object.keys(changes).length > 0) onEdit(todo.id, changes);
+        setEditing(false);
+      };
+
+      return (
+        <div className={`group rounded-xl border transition-all hover:shadow-sm ${todo.done ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-200'}`}>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button onClick={() => onToggle(todo.id, !todo.done)}
+              className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${todo.done ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300 hover:border-indigo-400'}`}>
+              {todo.done && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+            </button>
+
+            {editing ? (
+              <div className="flex-1 space-y-2">
+                <input value={draft} onChange={e => setDraft(e.target.value)} autoFocus placeholder="할 일"
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                <textarea value={draftContent} onChange={e => setDraftContent(e.target.value)} placeholder="상세 내용 (선택)" rows={2}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={save}>저장</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setDraft(todo.text); setDraftContent(todo.content || ''); }}>취소</Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => todo.content && setExpanded(!expanded)}>
+                  <span className={`text-sm ${todo.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{todo.text}</span>
+                  {todo.content && <span className="ml-1.5 text-[10px] text-indigo-400">{expanded ? '▲' : '▼'}</span>}
+                </div>
+                <span className="text-[10px] text-gray-300 hidden sm:block">#{todo.id}</span>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button size="sm" variant="ghost" onClick={() => { setDraft(todo.text); setDraftContent(todo.content || ''); setEditing(true); }}>✏️</Button>
+                  <Button size="sm" variant="ghost" onClick={() => onDelete(todo.id)}>🗑</Button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* content 펼치기 */}
+          {!editing && expanded && todo.content && (
+            <div className="px-12 pb-3">
+              <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">{todo.content}</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // App
+    // ========================================
+
+    function App() {
+      const [todos, setTodos] = useState([]);
+      const [input, setInput] = useState('');
+      const [inputContent, setInputContent] = useState('');
+      const [showContent, setShowContent] = useState(false);
+      const [filter, setFilter] = useState('all');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [apiMode, setApiMode] = useState(true);
+
+      const fetchTodos = useCallback(async () => {
+        if (!apiMode) return;
+        setLoading(true);
+        try {
+          const data = await todoApi.getAll();
+          setTodos(data);
+          setError(null);
+        } catch (e) {
+          setError(e.message);
+          setApiMode(false);
+          const saved = localStorage.getItem('todos_pg_local');
+          setTodos(saved ? JSON.parse(saved) : [
+            { id: 1, text: '장보기 - 우유, 계란, 빵 사기', done: false, content: '우유 2팩, 계란 30구, 식빵 1봉' },
+            { id: 2, text: '운동하기 - 헬스장 30분 러닝', done: false, content: '러닝머신 속도 8~10, 스트레칭 포함' },
+            { id: 3, text: '책 읽기 - 클린 코드 3장 정리', done: true, content: '함수 관련 챕터, 노션에 요약 정리' },
+            { id: 4, text: '이메일 확인 - 매일 답장', done: false, content: '팀장님 메일 우선, 스팸 정리' },
+            { id: 5, text: '코드 리뷰 - PR #42 리뷰 완료하기', done: false, content: '인증 모듈 리팩토링 PR, 보안 이슈 체크' },
+          ]);
+        } finally {
+          setLoading(false);
+        }
+      }, [apiMode]);
+
+      useEffect(() => { fetchTodos(); }, [fetchTodos]);
+      useEffect(() => { if (!apiMode) localStorage.setItem('todos_pg_local', JSON.stringify(todos)); }, [todos, apiMode]);
+
+      const addTodo = async () => {
+        if (!input.trim()) return;
+        const text = input.trim();
+        const content = inputContent.trim();
+        if (apiMode) {
+          try { const created = await todoApi.create(text, content); setTodos(p => [...p, created]); }
+          catch { setTodos(p => [...p, { id: Date.now(), text, done: false, content }]); }
+        } else {
+          setTodos(p => [...p, { id: Date.now(), text, done: false, content }]);
+        }
+        setInput('');
+        setInputContent('');
+        setShowContent(false);
+      };
+
+      const toggleTodo = async (id, done) => {
+        setTodos(p => p.map(t => t.id === id ? { ...t, done } : t));
+        if (apiMode) { try { await todoApi.update(id, { done }); } catch(e) { console.error('toggle failed:', e); } }
+      };
+
+      const editTodo = async (id, changes) => {
+        setTodos(p => p.map(t => t.id === id ? { ...t, ...changes } : t));
+        if (apiMode) { try { await todoApi.update(id, changes); } catch(e) { console.error('edit failed:', e); } }
+      };
+
+      const deleteTodo = async (id) => {
+        setTodos(p => p.filter(t => t.id !== id));
+        if (apiMode) { try { await todoApi.delete(id); } catch(e) { console.error('delete failed:', e); } }
+      };
+
+      const doneCount = todos.filter(t => t.done).length;
+      const filtered = todos.filter(t => filter === 'all' ? true : filter === 'active' ? !t.done : t.done);
+
+      return (
+        <div className="max-w-lg mx-auto px-4 py-10">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">Todo PostgreSQL API</h1>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className={`w-2 h-2 rounded-full ${apiMode ? 'bg-green-400' : error ? 'bg-yellow-400' : 'bg-gray-400'}`}></span>
+              <span className="text-xs text-gray-400">{apiMode ? 'PostgreSQL (Supabase) 연결됨' : '로컬 모드 (서버 없음)'}</span>
+            </div>
+          </div>
+
+          {/* API 엔드포인트 안내 */}
+          <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl text-xs text-gray-500 space-y-1">
+            <p className="font-semibold text-gray-700 text-sm mb-2">API Endpoints</p>
+            <p><span className="font-mono text-green-600">GET</span> <span className="font-mono">/api/todos</span> — 전체 조회</p>
+            <p><span className="font-mono text-blue-600">POST</span> <span className="font-mono">/api/todos</span> — 생성 <span className="text-gray-400">{'{ "text": "...", "content": "..." }'}</span></p>
+            <p><span className="font-mono text-yellow-600">PUT</span> <span className="font-mono">/api/todos/:id</span> — 수정 <span className="text-gray-400">{'{ "text", "done", "content" }'}</span></p>
+            <p><span className="font-mono text-red-600">DELETE</span> <span className="font-mono">/api/todos/:id</span> — 삭제</p>
+          </div>
+
+          {/* 진행률 */}
+          <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">{doneCount}/{todos.length} 완료</span>
+              <span className="text-sm font-bold text-indigo-600">{todos.length > 0 ? Math.round(doneCount / todos.length * 100) : 0}%</span>
+            </div>
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-500"
+                style={{ width: `${todos.length > 0 ? (doneCount / todos.length * 100) : 0}%` }}></div>
+            </div>
+            <div className="flex gap-1 mt-3">
+              {todos.map((t, i) => (
+                <div key={t.id} className={`flex-1 h-1.5 rounded-full transition-colors ${t.done ? 'bg-indigo-500' : 'bg-gray-200'}`}
+                  title={`${i+1}/${todos.length} ${t.text} ${t.done ? '✓' : ''}`}></div>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
+              API 연결 실패 ({error}) — 로컬 모드로 전환됨
+            </div>
+          )}
+
+          {/* 입력 */}
+          <div className="mb-5 space-y-2">
+            <div className="flex gap-2">
+              <input value={input} onChange={e => setInput(e.target.value)} placeholder="새 할 일 입력..."
+                onKeyDown={e => e.key === 'Enter' && !showContent && addTodo()}
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <button onClick={() => setShowContent(!showContent)}
+                className={`px-3 py-2 text-xs rounded-lg border transition ${showContent ? 'bg-indigo-50 border-indigo-300 text-indigo-600' : 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50'}`}
+                title="상세 내용 추가">+</button>
+              <Button onClick={addTodo}>추가</Button>
+            </div>
+            {showContent && (
+              <textarea value={inputContent} onChange={e => setInputContent(e.target.value)} placeholder="상세 내용 (선택)"
+                rows={2} className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+            )}
+          </div>
+
+          {/* 필터 */}
+          <div className="flex gap-2 mb-4">
+            {[['all','전체',todos.length],['active','진행중',todos.length-doneCount],['done','완료',doneCount]].map(([key,label,count]) => (
+              <button key={key} onClick={() => setFilter(key)}
+                className={`px-3 py-1.5 text-xs rounded-lg transition ${filter === key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border hover:bg-gray-50'}`}>
+                {label} {count}
+              </button>
+            ))}
+          </div>
+
+          {/* 목록 */}
+          {loading ? (
+            <div className="text-center py-16 text-gray-400 text-sm">불러오는 중...</div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.length === 0 ? (
+                <div className="text-center py-16 text-gray-300">
+                  <p className="text-3xl mb-2">✨</p>
+                  <p className="text-sm">할 일이 없습니다</p>
+                </div>
+              ) : filtered.map(todo => (
+                <TodoItem key={todo.id} todo={todo} onToggle={toggleTodo} onDelete={deleteTodo} onEdit={editTodo} />
+              ))}
+            </div>
+          )}
+
+          {doneCount > 0 && (
+            <div className="mt-6 text-center">
+              <Button variant="ghost" size="sm" onClick={() => todos.filter(t=>t.done).forEach(t => deleteTodo(t.id))}>
+                완료 항목 삭제 ({doneCount})
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
