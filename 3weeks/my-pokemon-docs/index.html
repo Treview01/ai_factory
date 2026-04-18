@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>포켓몬 도감</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .pokemon-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .pokemon-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.12); }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-red-50 via-yellow-50 to-blue-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // ========================================
+    // 🎨 Design System Components
+    // ========================================
+
+    function Input({ value, onChange, placeholder, className = '' }) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className={`w-full px-5 py-3 rounded-full border-2 border-gray-200 focus:border-red-400 focus:outline-none bg-white shadow-sm text-base ${className}`}
+        />
+      );
+    }
+
+    function Badge({ children, color = 'gray' }) {
+      const colors = {
+        grass: 'bg-green-100 text-green-700 border-green-200',
+        fire: 'bg-red-100 text-red-700 border-red-200',
+        water: 'bg-blue-100 text-blue-700 border-blue-200',
+        electric: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        psychic: 'bg-pink-100 text-pink-700 border-pink-200',
+        poison: 'bg-purple-100 text-purple-700 border-purple-200',
+        flying: 'bg-sky-100 text-sky-700 border-sky-200',
+        normal: 'bg-gray-100 text-gray-700 border-gray-200',
+      };
+      return (
+        <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${colors[color] || colors.normal}`}>
+          {children}
+        </span>
+      );
+    }
+
+    function Card({ children, className = '' }) {
+      return (
+        <div className={`bg-white rounded-3xl shadow-md p-6 pokemon-card ${className}`}>
+          {children}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🎨 Pokemon SVG Illustrations (hand-drawn)
+    // ========================================
+
+    function PikachuSVG() {
+      return (
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <ellipse cx="100" cy="120" rx="55" ry="50" fill="#FFD93D" stroke="#333" strokeWidth="3"/>
+          <circle cx="100" cy="95" r="45" fill="#FFD93D" stroke="#333" strokeWidth="3"/>
+          <path d="M 65 55 L 50 20 L 85 65 Z" fill="#FFD93D" stroke="#333" strokeWidth="3"/>
+          <path d="M 50 20 L 60 40 L 70 25 Z" fill="#333"/>
+          <path d="M 135 55 L 150 20 L 115 65 Z" fill="#FFD93D" stroke="#333" strokeWidth="3"/>
+          <path d="M 150 20 L 140 40 L 130 25 Z" fill="#333"/>
+          <circle cx="80" cy="95" r="6" fill="#333"/>
+          <circle cx="120" cy="95" r="6" fill="#333"/>
+          <circle cx="82" cy="93" r="2" fill="#fff"/>
+          <circle cx="122" cy="93" r="2" fill="#fff"/>
+          <circle cx="70" cy="110" r="7" fill="#FF6B6B" opacity="0.7"/>
+          <circle cx="130" cy="110" r="7" fill="#FF6B6B" opacity="0.7"/>
+          <path d="M 90 115 Q 100 125 110 115" fill="none" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="100" cy="118" r="3" fill="#333"/>
+          <path d="M 150 140 Q 180 130 175 160 L 165 150 Q 160 145 150 140" fill="#FFD93D" stroke="#333" strokeWidth="3"/>
+        </svg>
+      );
+    }
+
+    function BulbasaurSVG() {
+      return (
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <ellipse cx="100" cy="125" rx="65" ry="55" fill="#88D498" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="100" cy="125" rx="55" ry="45" fill="#A8E6B5"/>
+          <circle cx="75" cy="75" r="25" fill="#7FC896" stroke="#333" strokeWidth="3"/>
+          <circle cx="125" cy="75" r="25" fill="#7FC896" stroke="#333" strokeWidth="3"/>
+          <circle cx="100" cy="60" r="28" fill="#6BBF85" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="80" cy="120" rx="6" ry="8" fill="#333"/>
+          <ellipse cx="120" cy="120" rx="6" ry="8" fill="#333"/>
+          <circle cx="82" cy="117" r="2" fill="#fff"/>
+          <circle cx="122" cy="117" r="2" fill="#fff"/>
+          <path d="M 85 140 Q 100 150 115 140" fill="none" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
+          <path d="M 90 140 L 90 145 M 110 140 L 110 145" stroke="#333" strokeWidth="2"/>
+          <circle cx="70" cy="130" r="5" fill="#5FAA7A" opacity="0.6"/>
+          <circle cx="130" cy="130" r="5" fill="#5FAA7A" opacity="0.6"/>
+        </svg>
+      );
+    }
+
+    function CharmanderSVG() {
+      return (
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <path d="M 150 130 Q 175 115 180 95 Q 175 120 165 135" fill="#FF9F45" stroke="#333" strokeWidth="3"/>
+          <path d="M 168 100 Q 175 80 170 65 Q 175 85 178 100" fill="#FF6B35" stroke="#FFB84D" strokeWidth="2"/>
+          <ellipse cx="95" cy="120" rx="55" ry="50" fill="#FFA94D" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="95" cy="135" rx="40" ry="30" fill="#FFCC80"/>
+          <circle cx="95" cy="90" r="42" fill="#FFA94D" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="78" cy="85" rx="7" ry="9" fill="#333"/>
+          <ellipse cx="112" cy="85" rx="7" ry="9" fill="#333"/>
+          <circle cx="80" cy="82" r="2" fill="#fff"/>
+          <circle cx="114" cy="82" r="2" fill="#fff"/>
+          <path d="M 85 105 Q 95 115 105 105" fill="none" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="95" cy="108" r="2" fill="#333"/>
+        </svg>
+      );
+    }
+
+    function SquirtleSVG() {
+      return (
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <ellipse cx="100" cy="130" rx="65" ry="50" fill="#8B4513" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="100" cy="125" rx="55" ry="40" fill="#D4A574"/>
+          <path d="M 70 115 L 130 115 M 75 135 L 125 135 M 80 100 L 120 100" stroke="#8B4513" strokeWidth="2"/>
+          <circle cx="100" cy="85" r="42" fill="#87CEEB" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="83" cy="80" rx="7" ry="9" fill="#333"/>
+          <ellipse cx="117" cy="80" rx="7" ry="9" fill="#333"/>
+          <circle cx="85" cy="77" r="2" fill="#fff"/>
+          <circle cx="119" cy="77" r="2" fill="#fff"/>
+          <path d="M 85 100 Q 100 112 115 100" fill="none" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
+          <circle cx="75" cy="90" r="6" fill="#FFB6C1" opacity="0.6"/>
+          <circle cx="125" cy="90" r="6" fill="#FFB6C1" opacity="0.6"/>
+        </svg>
+      );
+    }
+
+    function MewSVG() {
+      return (
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <ellipse cx="100" cy="125" rx="45" ry="42" fill="#FFB6C1" stroke="#333" strokeWidth="3"/>
+          <circle cx="100" cy="85" r="42" fill="#FFC0CB" stroke="#333" strokeWidth="3"/>
+          <path d="M 75 55 L 65 35 L 85 50 Z" fill="#FFB6C1" stroke="#333" strokeWidth="3"/>
+          <path d="M 125 55 L 135 35 L 115 50 Z" fill="#FFB6C1" stroke="#333" strokeWidth="3"/>
+          <ellipse cx="85" cy="85" rx="6" ry="8" fill="#333"/>
+          <ellipse cx="115" cy="85" rx="6" ry="8" fill="#333"/>
+          <circle cx="87" cy="82" r="2" fill="#fff"/>
+          <circle cx="117" cy="82" r="2" fill="#fff"/>
+          <path d="M 90 100 Q 100 108 110 100" fill="none" stroke="#333" strokeWidth="3" strokeLinecap="round"/>
+          <path d="M 140 140 Q 170 130 180 160 Q 175 180 160 175 Q 170 165 165 150" fill="none" stroke="#333" strokeWidth="3"/>
+          <circle cx="75" cy="95" r="5" fill="#FF69B4" opacity="0.5"/>
+          <circle cx="125" cy="95" r="5" fill="#FF69B4" opacity="0.5"/>
+        </svg>
+      );
+    }
+
+    // ========================================
+    // 📦 Pokemon Data
+    // ========================================
+
+    const POKEMONS = [
+      {
+        id: 25,
+        name: '피카츄',
+        nameEn: 'Pikachu',
+        types: [{ label: '전기', color: 'electric' }],
+        description: '볼에 있는 전기 주머니에서 전기를 모아 강력한 전격을 뿜어낸다.',
+        height: '0.4m',
+        weight: '6.0kg',
+        Svg: PikachuSVG,
+        bg: 'from-yellow-100 to-yellow-200',
+      },
+      {
+        id: 1,
+        name: '이상해씨',
+        nameEn: 'Bulbasaur',
+        types: [{ label: '풀', color: 'grass' }, { label: '독', color: 'poison' }],
+        description: '태어날 때부터 등에 식물의 씨앗이 있어 조금씩 크게 자라난다.',
+        height: '0.7m',
+        weight: '6.9kg',
+        Svg: BulbasaurSVG,
+        bg: 'from-green-100 to-green-200',
+      },
+      {
+        id: 4,
+        name: '파이리',
+        nameEn: 'Charmander',
+        types: [{ label: '불꽃', color: 'fire' }],
+        description: '꼬리 끝에서 태어날 때부터 불꽃이 타오른다. 불꽃이 꺼지면 죽어버린다.',
+        height: '0.6m',
+        weight: '8.5kg',
+        Svg: CharmanderSVG,
+        bg: 'from-orange-100 to-red-200',
+      },
+      {
+        id: 7,
+        name: '꼬부기',
+        nameEn: 'Squirtle',
+        types: [{ label: '물', color: 'water' }],
+        description: '등껍질에 몸을 움츠려 몸을 보호한다. 입에서 거품 물을 내뿜는다.',
+        height: '0.5m',
+        weight: '9.0kg',
+        Svg: SquirtleSVG,
+        bg: 'from-blue-100 to-blue-200',
+      },
+      {
+        id: 151,
+        name: '뮤',
+        nameEn: 'Mew',
+        types: [{ label: '에스퍼', color: 'psychic' }],
+        description: '모든 포켓몬의 유전자를 가지고 있다고 전해지는 환상의 포켓몬.',
+        height: '0.4m',
+        weight: '4.0kg',
+        Svg: MewSVG,
+        bg: 'from-pink-100 to-pink-200',
+      },
+    ];
+
+    // ========================================
+    // 🧩 Page Components
+    // ========================================
+
+    function PokemonCard({ pokemon }) {
+      const { Svg } = pokemon;
+      return (
+        <Card>
+          <div className={`rounded-2xl bg-gradient-to-br ${pokemon.bg} p-4 mb-4 aspect-square flex items-center justify-center`}>
+            <Svg />
+          </div>
+          <div className="flex items-start justify-between mb-2">
+            <div>
+              <p className="text-xs text-gray-400 font-mono">No. {String(pokemon.id).padStart(3, '0')}</p>
+              <h3 className="text-xl font-bold text-gray-800">{pokemon.name}</h3>
+              <p className="text-xs text-gray-500">{pokemon.nameEn}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-1 mb-3">
+            {pokemon.types.map((t) => (
+              <Badge key={t.label} color={t.color}>{t.label}</Badge>
+            ))}
+          </div>
+          <p className="text-sm text-gray-600 leading-relaxed mb-3">{pokemon.description}</p>
+          <div className="flex justify-between text-xs text-gray-500 border-t pt-3">
+            <span>키 <strong className="text-gray-700">{pokemon.height}</strong></span>
+            <span>몸무게 <strong className="text-gray-700">{pokemon.weight}</strong></span>
+          </div>
+        </Card>
+      );
+    }
+
+    function HomePage() {
+      const [query, setQuery] = useState('');
+
+      const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return POKEMONS;
+        return POKEMONS.filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.nameEn.toLowerCase().includes(q) ||
+            p.types.some((t) => t.label.toLowerCase().includes(q)) ||
+            String(p.id).includes(q)
+        );
+      }, [query]);
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          {/* Header */}
+          <header className="text-center mb-10">
+            <h1 className="text-4xl md:text-5xl font-black text-gray-800 mb-2">
+              포켓몬 <span className="text-red-500">도감</span>
+            </h1>
+            <p className="text-gray-500">이름, 영문명, 타입, 번호로 검색해보세요</p>
+          </header>
+
+          {/* Search */}
+          <div className="max-w-xl mx-auto mb-10">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="🔍  포켓몬을 검색해보세요 (예: 피카츄, 불꽃, 25)"
+            />
+          </div>
+
+          {/* Results */}
+          {filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <p className="text-5xl mb-3">🔍</p>
+              <p>검색 결과가 없습니다</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filtered.map((p) => (
+                <PokemonCard key={p.id} pokemon={p} />
+              ))}
+            </div>
+          )}
+
+          <footer className="text-center mt-12 text-xs text-gray-400">
+            총 {POKEMONS.length}마리의 포켓몬이 등록되어 있습니다
+          </footer>
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+
+    function App() {
+      return <HomePage />;
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

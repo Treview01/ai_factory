@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HTML 태그 총정리 예시 페이지">
+    <meta name="keywords" content="HTML, 태그, 예시">
+    <meta name="author" content="작성자">
+    <title>HTML 태그 총정리</title>
+    <link rel="stylesheet" href="style.css">
+    <base target="_self">
+</head>
+<body>
+
+    <!-- ==================== 헤더 영역 ==================== -->
+    <header>
+        <hgroup>
+            <h1>HTML 태그 총정리</h1>
+            <p>모든 HTML 태그를 한 페이지에서 확인하세요</p>
+        </hgroup>
+
+        <nav>
+            <ul>
+                <li><a href="#text">텍스트</a></li>
+                <li><a href="#list">목록</a></li>
+                <li><a href="#table">표</a></li>
+                <li><a href="#form">폼</a></li>
+                <li><a href="#media">미디어</a></li>
+                <li><a href="#semantic">시맨틱</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <hr>
+
+    <!-- ==================== 메인 영역 ==================== -->
+    <main>
+
+        <!-- ===== 제목 태그 ===== -->
+        <section id="heading">
+            <h2>제목 태그 (h1~h6)</h2>
+            <h1>h1 - 가장 큰 제목</h1>
+            <h2>h2 - 두 번째 제목</h2>
+            <h3>h3 - 세 번째 제목</h3>
+            <h4>h4 - 네 번째 제목</h4>
+            <h5>h5 - 다섯 번째 제목</h5>
+            <h6>h6 - 가장 작은 제목</h6>
+        </section>
+
+        <hr>
+
+        <!-- ===== 텍스트 관련 태그 ===== -->
+        <section id="text">
+            <h2>텍스트 관련 태그</h2>
+
+            <p>이것은 <strong>강하게 강조</strong>된 텍스트입니다.</p>
+            <p>이것은 <em>기울임 강조</em>된 텍스트입니다.</p>
+            <p>이것은 <b>굵은</b> 텍스트입니다. (의미 없는 굵게)</p>
+            <p>이것은 <i>이탤릭</i> 텍스트입니다. (의미 없는 기울임)</p>
+            <p>이것은 <u>밑줄</u> 텍스트입니다.</p>
+            <p>이것은 <s>취소선</s> 텍스트입니다.</p>
+            <p>이것은 <del>삭제된</del> 텍스트와 <ins>추가된</ins> 텍스트입니다.</p>
+            <p>이것은 <mark>형광펜 표시</mark>된 텍스트입니다.</p>
+            <p>이것은 <small>작은</small> 텍스트입니다.</p>
+            <p>이것은 <sup>위첨자</sup>와 <sub>아래첨자</sub> 예시입니다. 예: H<sub>2</sub>O, E=mc<sup>2</sup></p>
+            <p><abbr title="HyperText Markup Language">HTML</abbr>은 웹 페이지의 구조를 정의합니다.</p>
+            <p><cite>HTML 완벽 가이드</cite>라는 책에서 인용했습니다.</p>
+            <p>키보드 입력: <kbd>Ctrl</kbd> + <kbd>C</kbd>를 누르세요.</p>
+            <p>프로그램 출력: <samp>Hello, World!</samp></p>
+            <p>변수: <var>x</var> = <var>y</var> + 2</p>
+            <p>날짜: <time datetime="2026-03-28">2026년 3월 28일</time></p>
+            <p>이 제품은 <data value="12000">12,000원</data>입니다.</p>
+            <p>진행률: <meter value="0.7" min="0" max="1">70%</meter></p>
+            <p>다운로드 진행: <progress value="65" max="100">65%</progress></p>
+
+            <p>인라인 코드: <code>console.log('Hello');</code></p>
+
+            <pre>
+    이것은 pre 태그입니다.
+    공백과     들여쓰기가
+        그대로    유지됩니다.
+            </pre>
+
+            <pre><code>
+// 코드 블록 예시
+function greet(name) {
+    return `안녕하세요, ${name}님!`;
+}
+            </code></pre>
+
+            <blockquote cite="https://example.com">
+                <p>인용문입니다. 누군가의 말이나 글을 인용할 때 사용합니다.</p>
+                <footer>— <cite>유명한 사람</cite></footer>
+            </blockquote>
+
+            <p>줄바꿈 태그:<br>이렇게 줄이 바뀝니다.</p>
+
+            <p>단어 줄바꿈 기회: 아주긴단어중간에<wbr>줄바꿈이될수있습니다.</p>
+
+            <address>
+                작성자: 홍길동<br>
+                이메일: <a href="mailto:hong@example.com">hong@example.com</a><br>
+                서울특별시 강남구
+            </address>
+
+            <p>양방향 텍스트: <bdo dir="rtl">이 텍스트는 오른쪽에서 왼쪽으로 표시됩니다</bdo></p>
+            <p>양방향 격리: <bdi>مرحبا</bdi> 사용자가 3개의 글을 작성했습니다.</p>
+
+            <p>루비 주석(동아시아 문자 발음 표시): <ruby>漢字<rp>(</rp><rt>한자</rt><rp>)</rp></ruby></p>
+        </section>
+
+        <hr>
+
+        <!-- ===== 링크 태그 ===== -->
+        <section id="link">
+            <h2>링크 태그</h2>
+            <p><a href="https://www.example.com" target="_blank" rel="noopener noreferrer">외부 링크 (새 탭)</a></p>
+            <p><a href="#top">페이지 내 이동 (앵커)</a></p>
+            <p><a href="mailto:test@example.com">이메일 보내기</a></p>
+            <p><a href="tel:010-1234-5678">전화 걸기</a></p>
+            <p><a href="sample.pdf" download>파일 다운로드</a></p>
+        </section>
+
+        <hr>
+
+        <!-- ===== 목록 태그 ===== -->
+        <section id="list">
+            <h2>목록 태그</h2>
+
+            <h3>순서 없는 목록 (ul)</h3>
+            <ul>
+                <li>사과</li>
+                <li>바나나
+                    <ul>
+                        <li>미니 바나나</li>
+                        <li>몽키 바나나</li>
+                    </ul>
+                </li>
+                <li>포도</li>
+            </ul>
+
+            <h3>순서 있는 목록 (ol)</h3>
+            <ol>
+                <li>첫 번째 항목</li>
+                <li>두 번째 항목</li>
+                <li>세 번째 항목</li>
+            </ol>
+
+            <ol type="A" start="3">
+                <li>C부터 시작하는 알파벳 목록</li>
+                <li>D 항목</li>
+            </ol>
+
+            <h3>정의 목록 (dl)</h3>
+            <dl>
+                <dt>HTML</dt>
+                <dd>웹 페이지의 구조를 정의하는 마크업 언어</dd>
+
+                <dt>CSS</dt>
+                <dd>웹 페이지의 스타일을 지정하는 스타일시트 언어</dd>
+
+                <dt>JavaScript</dt>
+                <dd>웹 페이지에 동적 기능을 추가하는 프로그래밍 언어</dd>
+            </dl>
+        </section>
+
+        <hr>
+
+        <!-- ===== 표 태그 ===== -->
+        <section id="table">
+            <h2>표 태그 (table)</h2>
+
+            <table>
+                <caption>학생 성적표</caption>
+                <colgroup>
+                    <col class="col-name">
+                    <col span="2">
+                    <col class="col-avg">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th scope="col">이름</th>
+                        <th scope="col">국어</th>
+                        <th scope="col">수학</th>
+                        <th scope="col">평균</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>홍길동</td>
+                        <td>90</td>
+                        <td>85</td>
+                        <td>87.5</td>
+                    </tr>
+                    <tr>
+                        <td>김철수</td>
+                        <td>78</td>
+                        <td>92</td>
+                        <td>85.0</td>
+                    </tr>
+                    <tr>
+                        <td>이영희</td>
+                        <td>95</td>
+                        <td>88</td>
+                        <td>91.5</td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th scope="row">전체 평균</th>
+                        <td colspan="3">88.0</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <h3>셀 병합 예시</h3>
+            <table>
+                <tr>
+                    <td rowspan="2">세로 병합</td>
+                    <td>A</td>
+                    <td>B</td>
+                </tr>
+                <tr>
+                    <td colspan="2">가로 병합</td>
+                </tr>
+            </table>
+        </section>
+
+        <hr>
+
+        <!-- ===== 폼 태그 ===== -->
+        <section id="form">
+            <h2>폼 태그 (form)</h2>
+
+            <form action="/submit" method="post" enctype="multipart/form-data">
+
+                <fieldset>
+                    <legend>기본 입력</legend>
+
+                    <label for="username">이름:</label>
+                    <input type="text" id="username" name="username" placeholder="이름을 입력하세요" required autofocus>
+                    <br><br>
+
+                    <label for="email">이메일:</label>
+                    <input type="email" id="email" name="email" placeholder="example@email.com">
+                    <br><br>
+
+                    <label for="password">비밀번호:</label>
+                    <input type="password" id="password" name="password" minlength="8">
+                    <br><br>
+
+                    <label for="phone">전화번호:</label>
+                    <input type="tel" id="phone" name="phone" pattern="[0-9]{3}-[0-9]{4}-[0-9]{4}" placeholder="010-1234-5678">
+                    <br><br>
+
+                    <label for="url">웹사이트:</label>
+                    <input type="url" id="url" name="url" placeholder="https://example.com">
+                    <br><br>
+
+                    <label for="search">검색:</label>
+                    <input type="search" id="search" name="search" placeholder="검색어 입력">
+                    <br><br>
+                </fieldset>
+
+                <fieldset>
+                    <legend>숫자/날짜 입력</legend>
+
+                    <label for="age">나이:</label>
+                    <input type="number" id="age" name="age" min="1" max="150" step="1" value="25">
+                    <br><br>
+
+                    <label for="score">점수 (range):</label>
+                    <input type="range" id="score" name="score" min="0" max="100" value="50">
+                    <output for="score">50</output>
+                    <br><br>
+
+                    <label for="birthday">생년월일:</label>
+                    <input type="date" id="birthday" name="birthday">
+                    <br><br>
+
+                    <label for="meeting">미팅 시간:</label>
+                    <input type="datetime-local" id="meeting" name="meeting">
+                    <br><br>
+
+                    <label for="month">월:</label>
+                    <input type="month" id="month" name="month">
+                    <br><br>
+
+                    <label for="week">주:</label>
+                    <input type="week" id="week" name="week">
+                    <br><br>
+
+                    <label for="alarm">시간:</label>
+                    <input type="time" id="alarm" name="alarm">
+                    <br><br>
+                </fieldset>
+
+                <fieldset>
+                    <legend>선택/기타 입력</legend>
+
+                    <label for="color">색상 선택:</label>
+                    <input type="color" id="color" name="color" value="#ff6600">
+                    <br><br>
+
+                    <label for="file">파일 업로드:</label>
+                    <input type="file" id="file" name="file" accept="image/*" multiple>
+                    <br><br>
+
+                    <input type="hidden" name="secretToken" value="abc123">
+
+                    <p>체크박스:</p>
+                    <label><input type="checkbox" name="hobby" value="reading"> 독서</label>
+                    <label><input type="checkbox" name="hobby" value="sports" checked> 운동</label>
+                    <label><input type="checkbox" name="hobby" value="music"> 음악</label>
+                    <br><br>
+
+                    <p>라디오 버튼:</p>
+                    <label><input type="radio" name="gender" value="male"> 남성</label>
+                    <label><input type="radio" name="gender" value="female"> 여성</label>
+                    <label><input type="radio" name="gender" value="other"> 기타</label>
+                    <br><br>
+
+                    <label for="city">도시 선택 (select):</label>
+                    <select id="city" name="city">
+                        <optgroup label="수도권">
+                            <option value="seoul">서울</option>
+                            <option value="incheon">인천</option>
+                            <option value="gyeonggi">경기</option>
+                        </optgroup>
+                        <optgroup label="광역시">
+                            <option value="busan">부산</option>
+                            <option value="daegu" selected>대구</option>
+                            <option value="gwangju">광주</option>
+                        </optgroup>
+                    </select>
+                    <br><br>
+
+                    <label for="browser">브라우저 (datalist):</label>
+                    <input list="browsers" id="browser" name="browser">
+                    <datalist id="browsers">
+                        <option value="Chrome">
+                        <option value="Firefox">
+                        <option value="Safari">
+                        <option value="Edge">
+                    </datalist>
+                    <br><br>
+
+                    <label for="bio">자기소개 (textarea):</label><br>
+                    <textarea id="bio" name="bio" rows="4" cols="50" placeholder="자기소개를 입력하세요..." maxlength="500"></textarea>
+                    <br><br>
+                </fieldset>
+
+                <fieldset>
+                    <legend>버튼</legend>
+                    <input type="submit" value="제출 (input)">
+                    <input type="reset" value="초기화 (input)">
+                    <button type="button">일반 버튼 (button)</button>
+                    <button type="submit">제출 버튼 (button)</button>
+                    <input type="image" src="" alt="이미지 버튼" width="50" height="20">
+                </fieldset>
+
+            </form>
+        </section>
+
+        <hr>
+
+        <!-- ===== 미디어 태그 ===== -->
+        <section id="media">
+            <h2>미디어 태그</h2>
+
+            <h3>이미지 (img)</h3>
+            <img src="https://via.placeholder.com/300x200" alt="예시 이미지" width="300" height="200" loading="lazy">
+
+            <h3>반응형 이미지 (picture)</h3>
+            <picture>
+                <source media="(min-width: 800px)" srcset="https://via.placeholder.com/800x400">
+                <source media="(min-width: 400px)" srcset="https://via.placeholder.com/400x200">
+                <img src="https://via.placeholder.com/300x150" alt="반응형 이미지">
+            </picture>
+
+            <h3>이미지 맵 (map)</h3>
+            <img src="https://via.placeholder.com/400x200" alt="이미지 맵 예시" usemap="#imagemap" width="400" height="200">
+            <map name="imagemap">
+                <area shape="rect" coords="0,0,200,200" href="#link" alt="왼쪽 영역">
+                <area shape="circle" coords="300,100,50" href="#link" alt="원형 영역">
+            </map>
+
+            <h3>figure와 figcaption</h3>
+            <figure>
+                <img src="https://via.placeholder.com/300x200" alt="figure 이미지">
+                <figcaption>그림 1: figure와 figcaption 태그 예시</figcaption>
+            </figure>
+
+            <h3>오디오 (audio)</h3>
+            <audio controls preload="metadata">
+                <source src="audio.mp3" type="audio/mpeg">
+                <source src="audio.ogg" type="audio/ogg">
+                브라우저가 오디오를 지원하지 않습니다.
+            </audio>
+
+            <h3>비디오 (video)</h3>
+            <video controls width="400" height="300" poster="https://via.placeholder.com/400x300" preload="metadata">
+                <source src="video.mp4" type="video/mp4">
+                <source src="video.webm" type="video/webm">
+                <track kind="subtitles" src="subs_ko.vtt" srclang="ko" label="한국어" default>
+                브라우저가 비디오를 지원하지 않습니다.
+            </video>
+
+            <h3>임베드 (iframe)</h3>
+            <iframe src="https://www.example.com" width="400" height="200" title="임베드 예시" loading="lazy" sandbox="allow-scripts"></iframe>
+
+            <h3>외부 콘텐츠 (embed, object)</h3>
+            <embed type="application/pdf" src="document.pdf" width="400" height="300">
+
+            <object data="document.pdf" type="application/pdf" width="400" height="300">
+                <p>PDF를 표시할 수 없습니다. <a href="document.pdf">다운로드</a></p>
+            </object>
+
+            <h3>SVG (인라인)</h3>
+            <svg width="200" height="100" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="10" width="80" height="80" rx="10" fill="#4285f4" />
+                <circle cx="150" cy="50" r="40" fill="#ea4335" />
+                <text x="100" y="95" text-anchor="middle" fill="#333" font-size="12">SVG 예시</text>
+            </svg>
+
+            <h3>캔버스 (canvas)</h3>
+            <canvas id="myCanvas" width="300" height="150">
+                캔버스를 지원하지 않는 브라우저입니다.
+            </canvas>
+        </section>
+
+        <hr>
+
+        <!-- ===== 시맨틱/구조 태그 ===== -->
+        <section id="semantic">
+            <h2>시맨틱/구조 태그</h2>
+
+            <article>
+                <header>
+                    <h3>article 태그 - 블로그 글 예시</h3>
+                    <p><time datetime="2026-03-28">2026년 3월 28일</time> | 작성자: 홍길동</p>
+                </header>
+                <p>article 태그는 독립적인 콘텐츠를 나타냅니다. 블로그 글, 뉴스 기사, 포럼 글 등에 사용합니다.</p>
+                <footer>
+                    <p>태그: HTML, 시맨틱</p>
+                </footer>
+            </article>
+
+            <aside>
+                <h3>aside 태그</h3>
+                <p>aside는 본문과 간접적으로 관련된 부가 정보를 나타냅니다. 사이드바, 광고, 관련 링크 등에 사용합니다.</p>
+            </aside>
+
+            <div class="highlight">
+                <h3>div 태그</h3>
+                <p>div는 의미 없는 블록 컨테이너입니다. 스타일링이나 스크립트 목적으로 사용합니다.</p>
+            </div>
+
+            <p>이것은 <span class="span-demo">span 태그</span>입니다. 인라인 컨테이너로, 텍스트 일부에 스타일을 적용할 때 사용합니다.</p>
+
+            <details>
+                <summary>details와 summary 태그 (클릭하여 펼치기)</summary>
+                <p>이것은 접을 수 있는 콘텐츠입니다. details 태그 안에 숨겨진 내용이 들어갑니다.</p>
+                <p>summary는 항상 보이는 제목 부분입니다.</p>
+            </details>
+
+            <details open>
+                <summary>기본 펼침 상태 (open 속성)</summary>
+                <p>open 속성을 추가하면 기본적으로 펼쳐진 상태로 표시됩니다.</p>
+            </details>
+
+            <dialog id="myDialog">
+                <h3>dialog 태그</h3>
+                <p>이것은 대화 상자(모달)입니다.</p>
+                <button id="dialogClose">닫기</button>
+            </dialog>
+            <button id="dialogOpen">대화 상자 열기</button>
+
+            <h3>template 태그</h3>
+            <template id="myTemplate">
+                <div class="card">
+                    <h4>템플릿 카드</h4>
+                    <p>이 내용은 렌더링되지 않고 JS로 복제하여 사용합니다.</p>
+                </div>
+            </template>
+            <p>template 태그의 내용은 화면에 표시되지 않습니다.</p>
+
+            <h3>slot 태그 (웹 컴포넌트용)</h3>
+            <p>slot 태그는 웹 컴포넌트의 Shadow DOM 내에서 사용됩니다.</p>
+
+            <h3>noscript 태그</h3>
+            <noscript>
+                <p>JavaScript가 비활성화되어 있습니다. 일부 기능이 제한될 수 있습니다.</p>
+            </noscript>
+        </section>
+
+        <hr>
+
+        <!-- ===== 인터랙티브 태그 ===== -->
+        <section id="interactive">
+            <h2>기타 태그</h2>
+
+            <h3>수평선 (hr)</h3>
+            <hr>
+
+            <h3>접근성 관련</h3>
+            <p role="alert">이것은 role 속성을 사용한 접근성 예시입니다.</p>
+
+            <h3>data 속성 활용</h3>
+            <p data-info="custom-data" id="dataExample">이 요소에는 data-info 커스텀 속성이 있습니다.</p>
+
+            <h3>contenteditable</h3>
+            <p contenteditable="true" class="editable">
+                이 텍스트는 직접 편집할 수 있습니다. 클릭해서 수정해보세요!
+            </p>
+
+            <h3>draggable</h3>
+            <p draggable="true" class="draggable-item">
+                이 요소는 드래그할 수 있습니다.
+            </p>
+        </section>
+
+    </main>
+
+    <hr>
+
+    <!-- ==================== 푸터 영역 ==================== -->
+    <footer>
+        <p>&copy; 2026 HTML 태그 총정리. All rights reserved.</p>
+        <p>
+            특수문자 엔티티:
+            &amp; (앰퍼샌드) |
+            &lt; (작다) |
+            &gt; (크다) |
+            &quot; (큰따옴표) |
+            &apos; (작은따옴표) |
+            &nbsp; (공백)
+        </p>
+    </footer>
+
+    <!-- ==================== 스크립트 ==================== -->
+    <script src="script.js"></script>
+
+</body>
+</html>

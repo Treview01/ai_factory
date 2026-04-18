@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo API</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========================================
+    // 📡 API Layer
+    // ========================================
+
+    const API_BASE_URL = '/api';
+
+    async function api(endpoint, options = {}) {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    const todoApi = {
+      getAll:  ()          => api('/todos'),
+      create:  (text)      => api('/todos', { method: 'POST', body: { text } }),
+      update:  (id, data)  => api(`/todos/${id}`, { method: 'PUT', body: data }),
+      delete:  (id)        => api(`/todos/${id}`, { method: 'DELETE' }),
+    };
+
+    // ========================================
+    // 🎨 Design System
+    // ========================================
+
+    function Button({ children, variant = 'primary', size = 'md', onClick, disabled, className = '' }) {
+      const base = 'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1';
+      const v = {
+        primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-400',
+        secondary: 'bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400',
+        danger: 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-400',
+        ghost: 'text-gray-500 hover:bg-gray-100 focus:ring-gray-300',
+      };
+      const s = { sm: 'px-2.5 py-1 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-base' };
+      return (
+        <button onClick={onClick} disabled={disabled}
+          className={`${base} ${v[variant]} ${s[size]} ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${className}`}>
+          {children}
+        </button>
+      );
+    }
+
+    function Input({ value, onChange, placeholder, className = '', ...props }) {
+      return (
+        <input value={value} onChange={onChange} placeholder={placeholder}
+          className={`w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition ${className}`}
+          {...props} />
+      );
+    }
+
+    // ========================================
+    // 📋 TodoItem
+    // ========================================
+
+    function TodoItem({ todo, onToggle, onDelete, onEdit }) {
+      const [editing, setEditing] = useState(false);
+      const [draft, setDraft] = useState(todo.text);
+
+      const save = () => {
+        if (draft.trim() && draft.trim() !== todo.text) {
+          onEdit(todo.id, draft.trim());
+        }
+        setEditing(false);
+      };
+
+      return (
+        <div className={`group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm ${todo.done ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-200'}`}>
+          <button onClick={() => onToggle(todo.id, !todo.done)} aria-label="완료 토글"
+            className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition ${todo.done ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300 hover:border-indigo-400'}`}>
+            {todo.done && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+          </button>
+
+          {editing ? (
+            <form onSubmit={e => { e.preventDefault(); save(); }} className="flex-1 flex gap-2">
+              <Input value={draft} onChange={e => setDraft(e.target.value)} className="!py-1.5" autoFocus />
+              <Button size="sm" onClick={save}>저장</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setDraft(todo.text); }}>취소</Button>
+            </form>
+          ) : (
+            <>
+              <span className={`flex-1 text-sm ${todo.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{todo.text}</span>
+              <span className="text-[10px] text-gray-300 hidden sm:block">#{todo.id}</span>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button size="sm" variant="ghost" onClick={() => { setDraft(todo.text); setEditing(true); }}>✏️</Button>
+                <Button size="sm" variant="ghost" onClick={() => onDelete(todo.id)}>🗑</Button>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🚀 App
+    // ========================================
+
+    function App() {
+      const [todos, setTodos] = useState([]);
+      const [input, setInput] = useState('');
+      const [filter, setFilter] = useState('all');
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [apiMode, setApiMode] = useState(true);
+
+      const fetchTodos = useCallback(async () => {
+        if (!apiMode) return;
+        setLoading(true);
+        try {
+          const data = await todoApi.getAll();
+          setTodos(data);
+          setError(null);
+        } catch (e) {
+          setError(e.message);
+          setApiMode(false);
+          const saved = localStorage.getItem('todos_local');
+          setTodos(saved ? JSON.parse(saved) : [
+            { id: 1, text: '장보기 - 우유, 계란, 빵 사기', done: false },
+            { id: 2, text: '운동하기 - 헬스장 30분 러닝', done: false },
+            { id: 3, text: '책 읽기 - 클린 코드 3장 정리', done: true },
+            { id: 4, text: '이메일 확인 - 매일 답장', done: false },
+            { id: 5, text: '코드 리뷰 - PR #42 리뷰 완료하기', done: false },
+          ]);
+        } finally {
+          setLoading(false);
+        }
+      }, [apiMode]);
+
+      useEffect(() => { fetchTodos(); }, [fetchTodos]);
+      useEffect(() => { if (!apiMode) localStorage.setItem('todos_local', JSON.stringify(todos)); }, [todos, apiMode]);
+
+      const addTodo = async () => {
+        if (!input.trim()) return;
+        const text = input.trim();
+        if (apiMode) {
+          try { const created = await todoApi.create(text); setTodos(p => [...p, created]); }
+          catch { setTodos(p => [...p, { id: Date.now(), text, done: false }]); }
+        } else {
+          setTodos(p => [...p, { id: Date.now(), text, done: false }]);
+        }
+        setInput('');
+      };
+
+      const toggleTodo = async (id, done) => {
+        setTodos(p => p.map(t => t.id === id ? { ...t, done } : t));
+        if (apiMode) { try { await todoApi.update(id, { done }); } catch(e) { console.error('toggle failed:', e); } }
+      };
+
+      const editTodo = async (id, text) => {
+        setTodos(p => p.map(t => t.id === id ? { ...t, text } : t));
+        if (apiMode) { try { await todoApi.update(id, { text }); } catch(e) { console.error('edit failed:', e); } }
+      };
+
+      const deleteTodo = async (id) => {
+        setTodos(p => p.filter(t => t.id !== id));
+        if (apiMode) { try { await todoApi.delete(id); } catch(e) { console.error('delete failed:', e); } }
+      };
+
+      const doneCount = todos.filter(t => t.done).length;
+      const filtered = todos.filter(t =>
+        filter === 'all' ? true : filter === 'active' ? !t.done : t.done
+      );
+      const filters = [['all','전체',todos.length],['active','진행중',todos.length-doneCount],['done','완료',doneCount]];
+
+      return (
+        <div className="max-w-lg mx-auto px-4 py-10">
+          {/* 헤더 */}
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-gray-900">Todo API</h1>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className={`inline-block w-2 h-2 rounded-full ${apiMode ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+              <span className="text-xs text-gray-400">{apiMode ? 'API 서버 연결됨' : '로컬 모드 (서버 없음)'}</span>
+            </div>
+          </div>
+
+          {/* API 엔드포인트 안내 */}
+          <div className="mb-6 p-4 bg-white border border-gray-200 rounded-xl text-xs text-gray-500 space-y-1">
+            <p className="font-semibold text-gray-700 text-sm mb-2">API Endpoints</p>
+            <p><span className="font-mono text-green-600">GET</span> <span className="font-mono">/api/todos</span> — 전체 조회</p>
+            <p><span className="font-mono text-blue-600">POST</span> <span className="font-mono">/api/todos</span> — 생성 <span className="text-gray-400">{'{ "text": "..." }'}</span></p>
+            <p><span className="font-mono text-yellow-600">PUT</span> <span className="font-mono">/api/todos/:id</span> — 수정 <span className="text-gray-400">{'{ "text", "done" }'}</span></p>
+            <p><span className="font-mono text-red-600">DELETE</span> <span className="font-mono">/api/todos/:id</span> — 삭제</p>
+          </div>
+
+          {/* 에러 배너 */}
+          {error && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
+              API 연결 실패 ({error}) — 로컬 모드로 전환됨
+            </div>
+          )}
+
+          {/* 입력 */}
+          <div className="flex gap-2 mb-5">
+            <Input value={input} onChange={e => setInput(e.target.value)} placeholder="새 할 일 입력..."
+              onKeyDown={e => e.key === 'Enter' && addTodo()} />
+            <Button onClick={addTodo} className="flex-shrink-0">추가</Button>
+          </div>
+
+          {/* 필터 */}
+          <div className="flex gap-2 mb-4">
+            {filters.map(([key, label, count]) => (
+              <button key={key} onClick={() => setFilter(key)}
+                className={`px-3 py-1.5 text-xs rounded-lg transition ${filter === key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border hover:bg-gray-50'}`}>
+                {label} {count}
+              </button>
+            ))}
+          </div>
+
+          {/* 목록 */}
+          {loading ? (
+            <div className="text-center py-16 text-gray-400 text-sm">불러오는 중...</div>
+          ) : (
+            <div className="space-y-2">
+              {filtered.length === 0 ? (
+                <div className="text-center py-16 text-gray-300">
+                  <p className="text-3xl mb-2">✨</p>
+                  <p className="text-sm">할 일이 없습니다</p>
+                </div>
+              ) : (
+                filtered.map(todo => (
+                  <TodoItem key={todo.id} todo={todo}
+                    onToggle={toggleTodo} onDelete={deleteTodo} onEdit={editTodo} />
+                ))
+              )}
+            </div>
+          )}
+
+          {/* 하단 */}
+          {doneCount > 0 && (
+            <div className="mt-6 text-center">
+              <Button variant="ghost" size="sm"
+                onClick={() => { todos.filter(t=>t.done).forEach(t => deleteTodo(t.id)); }}>
+                완료 항목 삭제 ({doneCount})
+              </Button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========================================
+    // 🔄 Render
+    // ========================================
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
