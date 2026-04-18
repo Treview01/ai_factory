@@ -37,6 +37,16 @@ async function initDB() {
   }
 }
 
+// ── Vercel 서버리스: 첫 요청 시 DB 초기화 ──
+let dbReady = false;
+async function ensureDB(req, res, next) {
+  if (!dbReady) {
+    await initDB();
+    dbReady = true;
+  }
+  next();
+}
+
 // ── Middleware ──
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -46,6 +56,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json());
+app.use(ensureDB);
 app.use(express.static(__dirname));
 
 // ── API Routes ──

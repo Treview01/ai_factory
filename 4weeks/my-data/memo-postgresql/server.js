@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { Pool } = require('pg');
@@ -7,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 // ── pg로 DB 연결 ──
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres.hjazhydqvboccxwhjkuj:twncj115200@aws-1-us-east-1.pooler.supabase.com:6543/postgres',
+  connectionString: (process.env.DATABASE_URL || '').trim(),
   ssl: { rejectUnauthorized: false },
 });
 
